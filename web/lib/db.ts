@@ -18,6 +18,17 @@ export interface UserRow {
   handle: string;
   device_token: string;
   created_at: string;
+  email: string | null;
+  password_hash: string | null;
+}
+
+export interface SessionRow {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  created_at: string;
+  expires_at: string;
+  user_agent: string | null;
 }
 
 export interface TurnScoreRow {
@@ -84,10 +95,12 @@ function getSqlite(): any {
   sqliteDb.pragma("journal_mode = WAL");
   sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      handle       TEXT NOT NULL UNIQUE,
-      device_token TEXT NOT NULL UNIQUE,
-      created_at   TEXT NOT NULL
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      handle        TEXT NOT NULL UNIQUE,
+      device_token  TEXT NOT NULL UNIQUE,
+      created_at    TEXT NOT NULL,
+      email         TEXT UNIQUE,
+      password_hash TEXT
     );
     CREATE TABLE IF NOT EXISTS events (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,9 +121,23 @@ function getSqlite(): any {
       tip       TEXT,
       highlight TEXT
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL REFERENCES users(id),
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      user_agent TEXT
+    );
     CREATE INDEX IF NOT EXISTS idx_events_user_ts       ON events(user_id, ts);
     CREATE INDEX IF NOT EXISTS idx_turn_scores_user_ts  ON turn_scores(user_id, ts);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user        ON sessions(user_id);
   `);
+  // Migrate pre-existing dev DBs whose users table predates the auth columns.
+  const cols = sqliteDb.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("email")) sqliteDb.exec("ALTER TABLE users ADD COLUMN email TEXT");
+  if (!names.has("password_hash")) sqliteDb.exec("ALTER TABLE users ADD COLUMN password_hash TEXT");
   return sqliteDb;
 }
 
@@ -271,6 +298,162 @@ export async function ingestEvents(userId: number, events: IngestEvent[]): Promi
   });
   txn();
   return okEvents.length;
+}
+
+export async function getUserById(id: number): Promise<UserRow | undefined> {
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_users")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    throwOn(error, "getUserById");
+    return (data as UserRow | null) ?? undefined;
+  }
+  return getSqlite().prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
+}
+
+export async function getUserByEmail(email: string): Promise<UserRow | undefined> {
+  const e = email.trim().toLowerCase();
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_users")
+      .select("*")
+      .eq("email", e)
+      .maybeSingle();
+    throwOn(error, "getUserByEmail");
+    return (data as UserRow | null) ?? undefined;
+  }
+  return getSqlite().prepare("SELECT * FROM users WHERE email = ?").get(e) as UserRow | undefined;
+}
+
+/**
+ * Create a fully-formed signup user. Assumes handle/email uniqueness has been
+ * pre-checked, but the DB unique constraints are the real guard: on a race the
+ * insert throws and the caller maps it to 409.
+ */
+export async function createUser(params: {
+  handle: string;
+  email: string;
+  passwordHash: string;
+  deviceToken: string;
+}): Promise<UserRow> {
+  const email = params.email.trim().toLowerCase();
+  const created_at = new Date().toISOString();
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_users")
+      .insert({
+        handle: params.handle,
+        email,
+        password_hash: params.passwordHash,
+        device_token: params.deviceToken,
+        created_at,
+      })
+      .select("*")
+      .single();
+    if (error) throw new Error(`supabase createUser: ${error.message}`);
+    return data as UserRow;
+  }
+  const d = getSqlite();
+  const info = d
+    .prepare(
+      "INSERT INTO users (handle, email, password_hash, device_token, created_at) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(params.handle, email, params.passwordHash, params.deviceToken, created_at);
+  return (await getUserById(Number(info.lastInsertRowid)))!;
+}
+
+/** Backfill email/password on an existing row (used to give legacy jd a login). */
+export async function setUserAuth(
+  userId: number,
+  email: string,
+  passwordHash: string
+): Promise<void> {
+  const e = email.trim().toLowerCase();
+  if (useSupabase()) {
+    const { error } = await getSb()
+      .from("aif_users")
+      .update({ email: e, password_hash: passwordHash })
+      .eq("id", userId);
+    throwOn(error, "setUserAuth");
+    return;
+  }
+  getSqlite()
+    .prepare("UPDATE users SET email = ?, password_hash = ? WHERE id = ?")
+    .run(e, passwordHash, userId);
+}
+
+/* ---- sessions ---- */
+
+export async function createSession(params: {
+  userId: number;
+  tokenHash: string;
+  expiresAt: string;
+  userAgent: string | null;
+}): Promise<void> {
+  if (useSupabase()) {
+    const { error } = await getSb().from("aif_sessions").insert({
+      user_id: params.userId,
+      token_hash: params.tokenHash,
+      expires_at: params.expiresAt,
+      user_agent: params.userAgent,
+    });
+    throwOn(error, "createSession");
+    return;
+  }
+  getSqlite()
+    .prepare(
+      "INSERT INTO sessions (user_id, token_hash, created_at, expires_at, user_agent) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(
+      params.userId,
+      params.tokenHash,
+      new Date().toISOString(),
+      params.expiresAt,
+      params.userAgent
+    );
+}
+
+/**
+ * Resolve a session token-hash to its owning user, enforcing expiry
+ * server-side. Expired sessions are deleted lazily and return null.
+ */
+export async function getUserBySessionToken(tokenHash: string): Promise<UserRow | undefined> {
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_sessions")
+      .select("user_id, expires_at")
+      .eq("token_hash", tokenHash)
+      .maybeSingle();
+    throwOn(error, "getUserBySessionToken");
+    const row = data as { user_id: number; expires_at: string } | null;
+    if (!row) return undefined;
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      await deleteSession(tokenHash);
+      return undefined;
+    }
+    return getUserById(row.user_id);
+  }
+  const d = getSqlite();
+  const row = d
+    .prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash = ?")
+    .get(tokenHash) as { user_id: number; expires_at: string } | undefined;
+  if (!row) return undefined;
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    await deleteSession(tokenHash);
+    return undefined;
+  }
+  return getUserById(row.user_id);
+}
+
+export async function deleteSession(tokenHash: string): Promise<void> {
+  if (useSupabase()) {
+    const { error } = await getSb().from("aif_sessions").delete().eq("token_hash", tokenHash);
+    throwOn(error, "deleteSession");
+    return;
+  }
+  getSqlite().prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
 }
 
 export async function turnScoresFor(userId: number): Promise<TurnScoreRow[]> {

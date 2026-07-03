@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { getCurrentUser } from "@/lib/session";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const user = await getCurrentUser();
   return (
     <div className="landing">
       <div className="brand">
@@ -12,12 +16,25 @@ export default function Home() {
         Claude Code sessions, XP and levels, coaching tips, and a recruiter-shareable profile.
       </p>
       <div className="links">
-        <Link className="btn primary" href="/dashboard">
-          Open dashboard
-        </Link>
-        <Link className="btn" href="/u/jd">
-          Example profile
-        </Link>
+        {user ? (
+          <>
+            <Link className="btn primary" href="/dashboard">
+              Open dashboard
+            </Link>
+            <Link className="btn" href={`/u/${user.handle}`}>
+              My profile
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link className="btn primary" href="/signup">
+              Sign up
+            </Link>
+            <Link className="btn" href="/login">
+              Log in
+            </Link>
+          </>
+        )}
       </div>
     </div>
   );

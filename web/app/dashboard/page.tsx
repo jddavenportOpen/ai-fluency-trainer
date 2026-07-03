@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import Radar from "@/components/Radar";
 import XPBars from "@/components/XPBars";
-import { getUserByHandle, turnScoresFor, sessionCountFor } from "@/lib/db";
+import LogoutButton from "@/components/LogoutButton";
+import { turnScoresFor, sessionCountFor } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   dimAverages,
   levelProgress,
@@ -14,17 +17,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const HANDLE = "jd"; // MVP: single local user, no read auth
-
 export default async function Dashboard() {
-  const user = await getUserByHandle(HANDLE);
-  const scores = user ? await turnScoresFor(user.id) : [];
+  // Real session auth: only the logged-in user's own data is ever loaded here.
+  const user = await getCurrentUser();
+  if (!user) redirect("/login?next=/dashboard");
+  const HANDLE = user.handle;
+  const scores = await turnScoresFor(user.id);
   const xp = totalXP(scores);
   const lvl = levelProgress(xp);
   const avgs = dimAverages(scores);
   const weakest = weakestDims(scores, 3);
   const sessions = xpBySession(scores);
-  const sessionCount = user ? await sessionCountFor(user.id) : 0;
+  const sessionCount = await sessionCountFor(user.id);
   const feed = [...scores].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 10);
 
   return (
@@ -33,8 +37,9 @@ export default async function Dashboard() {
         <div className="brand">
           AI Fluency <span className="dot">■</span> Trainer
         </div>
-        <div style={{ fontSize: 13, color: "var(--muted)" }}>
+        <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", gap: 16 }}>
           <Link href={`/u/${HANDLE}`}>Public profile →</Link>
+          <LogoutButton />
         </div>
       </div>
 

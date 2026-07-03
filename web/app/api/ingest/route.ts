@@ -32,6 +32,15 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  // Cap batch size: an authenticated token can only bloat its own data, but a
+  // hard ceiling keeps a compromised/misconfigured token from ballooning storage.
+  // The sync client batches incrementally, so real batches are small.
+  if (events.length > 1000) {
+    return NextResponse.json(
+      { ok: false, error: "too many events in one batch (max 1000)" },
+      { status: 413 }
+    );
+  }
 
   const stored = await ingestEvents(user.id, events as IngestEvent[]);
   // received vs stored lets a misconfigured client see its events being
