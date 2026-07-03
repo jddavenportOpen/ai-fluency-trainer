@@ -1,0 +1,11 @@
+{
+  "name": "ai-fluency",
+  "owner": { "name": "JD Davenport" },
+  "plugins": [
+    {
+      "name": "ai-fluency",
+      "source": "./plugin",
+      "description": "Captures how you actually use Claude Code and scores your AI fluency — local-first, aggregate-only sync"
+    }
+  ]
+}
