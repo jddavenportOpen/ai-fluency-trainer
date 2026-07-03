@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const user = token ? getUserByToken(token) : undefined;
+  const user = token ? await getUserByToken(token) : undefined;
   if (!user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const stored = ingestEvents(user.id, events as IngestEvent[]);
-  return NextResponse.json({ ok: true, stored });
+  const stored = await ingestEvents(user.id, events as IngestEvent[]);
+  // received vs stored lets a misconfigured client see its events being
+  // dropped by per-event validation instead of a silent ok:true.
+  const skipped = events.length - stored;
+  return NextResponse.json({ ok: true, received: events.length, stored, skipped });
 }

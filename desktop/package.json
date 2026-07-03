@@ -1,0 +1,42 @@
+{
+  "name": "fluency-coach",
+  "productName": "Fluency Coach",
+  "version": "0.1.0",
+  "description": "Live coaching sidebar for Claude Code — XP, levels, per-turn feedback (desktop)",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "screenshot": "AIF_SCREENSHOT=1 electron .",
+    "replay": "AIF_REPLAY=\"${AIF_REPLAY:-../fixtures/out/good-user.events.jsonl}\" electron .",
+    "dist": "electron-builder --mac --arm64 --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.aifluency.fluencycoach",
+    "productName": "Fluency Coach",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null,
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

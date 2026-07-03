@@ -8,6 +8,11 @@ Two products, one spine:
 
 Why it should exist (see `~/clawd/projects/ai-fluency-trainer/research/RESEARCH.md`): ~40–50% of real AI use is passive delegation; passive use causally erodes skill (PNAS RCT: −17% on unassisted exams; guardrailed use: +127% practice, zero harm); and people **cannot self-assess** — METR's RCT found devs 19% slower while believing +20% faster. Scoring rubric grounded in that evidence; taxonomy aligns with Mark Keith's (BYU) aimodes.ai engagement modes.
 
+## Launched (2026-07-03)
+
+- **Hosted dashboard (prod):** https://ai-fluency-web-two.vercel.app — `/u/jd` public recruiter page; `/dashboard` key-gated (key in `~/.ai-fluency` notes / Vercel env `DASHBOARD_KEY`); ingest token rotated to prod value (in `~/.ai-fluency/config.json`). Supabase backend (`aif_*` tables, RLS on), SQLite still used automatically for local dev.
+- **Desktop app:** `desktop/dist/mac-arm64/Fluency Coach.app` — live coaching sidebar (Electron). Rebuild: `cd desktop && npm install && npm run dist`. Demo: `npm run replay`.
+
 ## 10-minute demo
 
 ```bash

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:" />
+  <title>Fluency Coach</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="header">
+    <div class="drag-strip"></div>
+    <div class="header-top">
+      <div class="level-block">
+        <div id="level-num" class="level-num">0</div>
+        <div class="level-meta">
+          <div id="level-title" class="level-title">Novice</div>
+          <div id="xp-total" class="xp-total">0 XP</div>
+        </div>
+      </div>
+      <div class="session-block">
+        <span id="session-dot" class="dot off"></span>
+        <span id="session-label" class="session-label">idle</span>
+      </div>
+    </div>
+    <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+    <div id="progress-label" class="progress-label">100 XP to Lv 1</div>
+    <nav class="tabs">
+      <button id="tab-live" class="tab active" type="button">Live</button>
+      <button id="tab-stats" class="tab" type="button">Stats</button>
+    </nav>
+  </header>
+
+  <main id="view-live" class="view">
+    <div id="empty-state" class="empty-state">
+      <div class="empty-glyph">&#9889;</div>
+      <div class="empty-title">waiting for your first Claude Code session</div>
+      <div class="empty-sub">install the trainer plugin, then just work:</div>
+      <code class="empty-code">cd ai-fluency-trainer &amp;&amp; ./install.sh</code>
+    </div>
+    <div id="feed" class="feed"></div>
+  </main>
+
+  <main id="view-stats" class="view hidden">
+    <div id="stats-body"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

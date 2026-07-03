@@ -17,9 +17,9 @@ type Params = { params: Promise<{ handle: string }> };
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { handle } = await params;
-  const user = getUserByHandle(handle);
+  const user = await getUserByHandle(handle);
   if (!user) return { title: "Profile not found — AI Fluency Trainer" };
-  const lvl = levelProgress(totalXP(turnScoresFor(user.id)));
+  const lvl = levelProgress(totalXP(await turnScoresFor(user.id)));
   const title = `${user.handle} · Level ${lvl.level} ${lvl.title} — AI Fluency Trainer`;
   const description = `Verified AI-collaboration fluency profile for @${user.handle}: level, dimension radar, and usage stats.`;
   return {
@@ -32,15 +32,15 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function SharePage({ params }: Params) {
   const { handle } = await params;
-  const user = getUserByHandle(handle);
+  const user = await getUserByHandle(handle);
   if (!user) notFound();
 
-  const scores = turnScoresFor(user.id);
+  const scores = await turnScoresFor(user.id);
   const xp = totalXP(scores);
   const lvl = levelProgress(xp);
   const avgs = dimAverages(scores);
   const strongest = strongestDims(scores, 3);
-  const sessions = sessionCountFor(user.id);
+  const sessions = await sessionCountFor(user.id);
 
   return (
     <div className="wrap">

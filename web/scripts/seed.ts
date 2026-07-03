@@ -1,17 +1,28 @@
 /**
- * Seed the local SQLite db with a demo user ("jd" / token "dev-token-jd") and
- * realistic fixture-shaped data: 4 synthesized coaching sessions with 18
- * turn_score events (varied dims), plus the repo fixture event logs
- * (fixtures/out/*.events.jsonl) if present.
+ * Seed the db with a demo user ("jd") and realistic fixture-shaped data:
+ * 4 synthesized coaching sessions with 18 turn_score events (varied dims),
+ * plus the repo fixture event logs (fixtures/out/*.events.jsonl) if present.
  *
- * Run from web/:  npm run seed
+ * Backend follows lib/db.ts: SQLite locally, Supabase when SUPABASE_URL +
+ * SUPABASE_SERVICE_ROLE_KEY are set. Device token comes from INGEST_TOKEN
+ * (defaults to dev-token-jd for local dev; ALWAYS set a strong one for prod).
+ *
+ * Local:  cd web && npm run seed
+ * Prod:   cd web && SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... INGEST_TOKEN=... npm run seed
  */
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, upsertUser, ingestEvents, type IngestEvent } from "../lib/db.ts";
+import {
+  upsertUser,
+  ingestEvents,
+  resetUserData,
+  setUserCreatedAt,
+  turnScoresFor,
+  type IngestEvent,
+} from "../lib/db.ts";
 
 const HANDLE = "jd";
-const TOKEN = "dev-token-jd";
+const TOKEN = process.env.INGEST_TOKEN || "dev-token-jd";
 
 // Dimension keys are data-driven by contract; this is just what the demo data uses.
 const DIMS = [
@@ -147,13 +158,12 @@ function loadFixtureEvents(): IngestEvent[] {
 }
 
 // ---- main ----
-const db = getDb();
-const user = upsertUser(HANDLE, TOKEN);
+const backend = process.env.SUPABASE_URL ? "supabase" : "sqlite";
+const user = await upsertUser(HANDLE, TOKEN);
 
 // idempotent: wipe this user's data before reseeding
-db.prepare("DELETE FROM events WHERE user_id = ?").run(user.id);
-db.prepare("DELETE FROM turn_scores WHERE user_id = ?").run(user.id);
-db.prepare("UPDATE users SET created_at = ? WHERE id = ?").run("2026-05-14T16:20:00.000Z", user.id);
+await resetUserData(user.id);
+await setUserCreatedAt(user.id, "2026-05-14T16:20:00.000Z");
 
 const sessions: IngestEvent[] = [
   ...buildSession("seed-s1", new Date("2026-06-20T14:05:00Z"), 4, 0.25),
@@ -163,11 +173,11 @@ const sessions: IngestEvent[] = [
 ];
 const fixtures = loadFixtureEvents();
 
-const stored = ingestEvents(user.id, [...fixtures, ...sessions]);
-const scoreCount = (db.prepare("SELECT COUNT(*) AS n FROM turn_scores WHERE user_id = ?").get(user.id) as { n: number }).n;
-const xpTotal = (db.prepare("SELECT COALESCE(SUM(xp),0) AS x FROM turn_scores WHERE user_id = ?").get(user.id) as { x: number }).x;
+const stored = await ingestEvents(user.id, [...fixtures, ...sessions]);
+const scores = await turnScoresFor(user.id);
+const xpTotal = scores.reduce((s, r) => s + (r.xp || 0), 0);
 
-console.log(`Seeded user "${HANDLE}" (device token: ${TOKEN})`);
+console.log(`Seeded user "${HANDLE}" (backend: ${backend}, device token: ${TOKEN})`);
 console.log(`  events stored:      ${stored} (${fixtures.length} from fixtures/out)`);
-console.log(`  turn_score rows:    ${scoreCount}`);
+console.log(`  turn_score rows:    ${scores.length}`);
 console.log(`  total XP:           ${xpTotal}`);

@@ -16,15 +16,15 @@ export const dynamic = "force-dynamic";
 
 const HANDLE = "jd"; // MVP: single local user, no read auth
 
-export default function Dashboard() {
-  const user = getUserByHandle(HANDLE);
-  const scores = user ? turnScoresFor(user.id) : [];
+export default async function Dashboard() {
+  const user = await getUserByHandle(HANDLE);
+  const scores = user ? await turnScoresFor(user.id) : [];
   const xp = totalXP(scores);
   const lvl = levelProgress(xp);
   const avgs = dimAverages(scores);
   const weakest = weakestDims(scores, 3);
   const sessions = xpBySession(scores);
-  const sessionCount = user ? sessionCountFor(user.id) : 0;
+  const sessionCount = user ? await sessionCountFor(user.id) : 0;
   const feed = [...scores].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 10);
 
   return (

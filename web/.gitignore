@@ -1,5 +1,7 @@
 node_modules/
 .next/
+.vercel/
 data/
 *.tsbuildinfo
 next-env.d.ts
+.vercel
