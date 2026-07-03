@@ -1,0 +1,6 @@
+{
+  "name": "ai-fluency",
+  "description": "Captures how you actually use Claude Code and scores your AI fluency — free analytics tier",
+  "version": "0.1.0",
+  "author": { "name": "JD Davenport" }
+}
