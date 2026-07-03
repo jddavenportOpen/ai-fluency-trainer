@@ -87,6 +87,32 @@ export interface WeakDim {
   tips: string[]; // most recent tips from low-scoring turns on this dim
 }
 
+/* Tips are local-only by default (they can embed prompt fragments; syncing
+ * them requires explicit opt-in), so the improvement panel needs behavioral
+ * prescriptions derived from the dim alone. Unknown dims get the generic line. */
+const DIM_ADVICE: Record<string, string> = {
+  context_setting:
+    "Open prompts like a brief to a new teammate: the goal, the exact files, and one constraint sentence. Short but precise beats long and vague.",
+  plan_first:
+    "Before the first edit, ask for a plan or use plan mode — review the approach, then let it build. Cold-start delegation is where quality dies.",
+  verification:
+    "End every mutating turn with evidence: a test run, a build, or a curl. Unverified AI output is the #1 skill-eroding behavior.",
+  diagnose_vs_retry:
+    "When something fails, paste the actual error text and add a hypothesis before retrying. \"Still broken\" teaches the model nothing.",
+  understanding_seeking:
+    "Once in a while, interrogate a decision that matters: \"why this approach over X?\" Genuine curiosity about tradeoffs — not a ritual \"why?\".",
+  scope_discipline:
+    "One coherent task per ask. Kitchen-sink prompts (\"also do X and Y and deploy it\") produce unreviewable batches.",
+  iteration_discipline:
+    "Engage with the output: read the diff, push back on one thing, or name an edge case. A bare \"ok\" is a missed rep.",
+};
+const GENERIC_ADVICE =
+  "Look at your recent low-scoring turns on this dimension in the coach app for specific, in-context guidance.";
+
+export function adviceFor(dimKey: string): string {
+  return DIM_ADVICE[dimKey] ?? GENERIC_ADVICE;
+}
+
 /** The `count` weakest dimensions, each with its most recent relevant tips. */
 export function weakestDims(scores: TurnScoreRow[], count = 3): WeakDim[] {
   const avgs = dimAverages(scores);

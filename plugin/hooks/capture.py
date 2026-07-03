@@ -6,6 +6,7 @@ Reads the hook payload from stdin, appends a normalized event line to
 detached process. Fail-open by design: any error exits 0 silently so the
 user's session is never degraded by telemetry.
 """
+import hashlib
 import json
 import os
 import subprocess
@@ -140,7 +141,9 @@ def main():
     if hook == "SessionStart":
         emit(sid, "session_start", {
             "source": payload.get("source", ""),
-            "cwd_hash": str(abs(hash(payload.get("cwd", ""))) % 10**10),
+            # sha256 (not hash()): stable across processes, so the same project
+            # maps to the same pseudonym without revealing the path.
+            "cwd_hash": hashlib.sha256(payload.get("cwd", "").encode()).hexdigest()[:10],
             "transcript_path": transcript,
             "kind": kind,
         })

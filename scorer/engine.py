@@ -205,6 +205,7 @@ def parse_transcript(path):
                 "complete": False,
                 "sid": rec.get("sessionId", ""),
                 "next_prompt": None,
+                "permission_mode": rec.get("permissionMode", ""),
             }
             turns.append(current)
             continue
@@ -278,7 +279,9 @@ def score_context_setting(turn, ctx):
 
 def score_plan_first(turn, ctx, state):
     p = turn["prompt"]
-    plan_lang = bool(PLAN_LANG_RE.search(p))
+    # Plan-mode usage is the platform-native version of the behavior this
+    # dimension measures (research row #1) — stronger signal than keywords.
+    plan_lang = bool(PLAN_LANG_RE.search(p)) or turn.get("permission_mode") == "plan"
     tool_names = [t["name"] for t in turn["tools"]]
     mut_idx = next((i for i, n in enumerate(tool_names) if n in MUTATING_TOOLS), None)
     turn_mutates = mut_idx is not None

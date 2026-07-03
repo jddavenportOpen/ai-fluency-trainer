@@ -162,6 +162,52 @@ interface ValidScore {
   highlight: string | null;
 }
 
+/* Server-side scoring weights. The credential's integrity depends on the
+ * server never trusting client-asserted XP: dims are clamped and XP is
+ * RECOMPUTED here from the server's own weight table (this is also the seam
+ * where sealed/rotating weights live — the client repo may be open-sourced,
+ * this file is not). Kept in sync with the client deliberately, not
+ * automatically. */
+const DIM_WEIGHTS: Record<string, number> = {
+  verification: 1.6,
+  diagnose_vs_retry: 1.4,
+  context_setting: 1.0,
+  plan_first: 1.0,
+  iteration_discipline: 1.0,
+  understanding_seeking: 0.8,
+  scope_discipline: 0.8,
+};
+const DEFAULT_WEIGHT = 1.0;
+const MAX_TIP_CHARS = 300;
+const MAX_DATA_JSON_CHARS = 4096;
+// Never store these even if a non-official client sends them.
+const SERVER_STRIP_KEYS = new Set(["text", "transcript_path"]);
+
+function clampDims(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(k)) continue;
+    out[k] = Math.max(0, Math.min(100, Math.round(n)));
+  }
+  return out;
+}
+
+function xpFromDims(dims: Record<string, number>): number {
+  const keys = Object.keys(dims);
+  if (keys.length === 0) return 10;
+  let sum = 0;
+  let wsum = 0;
+  for (const k of keys) {
+    const w = DIM_WEIGHTS[k] ?? DEFAULT_WEIGHT;
+    sum += dims[k] * w;
+    wsum += w;
+  }
+  return Math.round(10 + (40 * (sum / wsum)) / 100);
+}
+
 /** Fail-open per event: malformed entries are skipped, not fatal. */
 function validateBatch(events: IngestEvent[]): { events: ValidEvent[]; scores: ValidScore[] } {
   const okEvents: ValidEvent[] = [];
@@ -170,21 +216,25 @@ function validateBatch(events: IngestEvent[]): { events: ValidEvent[]; scores: V
     if (!ev || typeof ev !== "object") continue;
     const { ts, sid, event } = ev;
     if (typeof ts !== "string" || typeof sid !== "string" || typeof event !== "string") continue;
-    const data = ev.data && typeof ev.data === "object" ? ev.data : {};
+    const rawData = ev.data && typeof ev.data === "object" ? (ev.data as Record<string, unknown>) : {};
+    const data = Object.fromEntries(
+      Object.entries(rawData).filter(([k]) => !SERVER_STRIP_KEYS.has(k))
+    );
+    if (JSON.stringify(data).length > MAX_DATA_JSON_CHARS) continue;
     okEvents.push({ sid, ts, event, data });
     if (event === "turn_score") {
       const d = data as Record<string, unknown>;
       const turn = Number(d.turn ?? 0);
-      const xp = Number(d.xp ?? 0);
-      const dims = d.dims;
+      const dims = clampDims(d.dims);
       okScores.push({
         sid,
         ts,
-        turn: Number.isFinite(turn) ? turn : 0,
-        xp: Number.isFinite(xp) ? xp : 0,
-        dims_json: JSON.stringify(dims && typeof dims === "object" ? dims : {}),
-        tip: typeof d.tip === "string" ? d.tip : null,
-        highlight: typeof d.highlight === "string" ? d.highlight : null,
+        turn: Number.isFinite(turn) ? Math.max(0, Math.round(turn)) : 0,
+        // Client-asserted xp is IGNORED: recomputed from clamped dims.
+        xp: xpFromDims(dims),
+        dims_json: JSON.stringify(dims),
+        tip: typeof d.tip === "string" ? d.tip.slice(0, MAX_TIP_CHARS) : null,
+        highlight: typeof d.highlight === "string" ? d.highlight.slice(0, MAX_TIP_CHARS) : null,
       });
     }
   }

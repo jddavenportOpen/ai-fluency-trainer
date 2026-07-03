@@ -6,6 +6,7 @@ import LogoutButton from "@/components/LogoutButton";
 import { turnScoresFor, sessionCountFor } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
+  adviceFor,
   dimAverages,
   levelProgress,
   prettifyDim,
@@ -87,7 +88,7 @@ export default async function Dashboard() {
                 <span className="score-pill">avg {w.avg}</span>
               </div>
               <ul>
-                {w.tips.length === 0 && <li>No tips recorded for this dimension yet.</li>}
+                {w.tips.length === 0 && <li>{adviceFor(w.key)}</li>}
                 {w.tips.map((t) => (
                   <li key={t}>{t}</li>
                 ))}

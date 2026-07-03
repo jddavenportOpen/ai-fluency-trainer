@@ -48,7 +48,7 @@ export default async function SharePage({ params }: Params) {
         <div className="brand">
           AI Fluency <span className="dot">■</span> Trainer
         </div>
-        <span className="verified">✓ verified usage data</span>
+        <span className="verified">✓ behavior profile · beta</span>
       </div>
 
       <div className="share-hero">
@@ -93,13 +93,14 @@ export default async function SharePage({ params }: Params) {
 
       <div className="card" style={{ maxWidth: 560, margin: "0 auto" }}>
         <h2>Fluency Radar</h2>
-        <p className="sub">Average score per dimension across all verified sessions (0–100).</p>
+        <p className="sub">Average score per dimension across all scored sessions (0–100).</p>
         <Radar dims={avgs} size={420} />
       </div>
 
       <div className="footer-note">
-        Scores are computed from real Claude Code session telemetry — behavior over time, not
-        self-reported. · AI Fluency Trainer
+        Behavior profile computed from Claude Code session telemetry, scored on-device and
+        synced by the user. Server-verified scoring is coming; treat this as a
+        self-instrumented profile, not an audited credential. · AI Fluency Trainer
       </div>
     </div>
   );

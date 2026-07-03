@@ -29,7 +29,11 @@ CONFIG = os.path.join(FLUENCY_DIR, "config.json")
 STATE = os.path.join(FLUENCY_DIR, "sync_state.json")
 
 SYNCABLE = {"turn_score", "session_start", "session_end", "turn_end"}
-STRIP_KEYS = {"transcript_path", "text"}  # defense in depth: never ship these
+STRIP_KEYS = {"transcript_path", "text"}  # never ship these, ever
+# tip/highlight interpolate raw prompt fragments, file names, and bash command
+# text. They are for the LOCAL coach surfaces; they leave the machine ONLY with
+# explicit consent (config.json "sync_tips": true). Default: stripped.
+CONSENT_KEYS = {"tip", "highlight"}
 
 
 def load_json(path, default):
@@ -40,8 +44,9 @@ def load_json(path, default):
         return default
 
 
-def sanitize(ev):
-    data = {k: v for k, v in (ev.get("data") or {}).items() if k not in STRIP_KEYS}
+def sanitize(ev, sync_tips=False):
+    drop = STRIP_KEYS if sync_tips else (STRIP_KEYS | CONSENT_KEYS)
+    data = {k: v for k, v in (ev.get("data") or {}).items() if k not in drop}
     return {"v": ev.get("v", 1), "ts": ev.get("ts"), "sid": ev.get("sid"),
             "event": ev.get("event"), "data": data}
 
@@ -126,7 +131,7 @@ def main():
                 if not sync_all and kinds.get(ev.get("sid")) != "interactive":
                     skipped += 1
                     continue
-                batch.append(sanitize(ev))
+                batch.append(sanitize(ev, sync_tips=bool(cfg.get("sync_tips"))))
     except FileNotFoundError:
         print("sync: no events file yet — nothing to do")
         return 0
