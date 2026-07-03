@@ -506,26 +506,31 @@ def score_session(turns, only_complete=True, judge=None):
         if judge is not None:
             turn["prev_prompt"] = state["prev_prompt"]   # judge sees the prior prompt
             judged = _apply_judge(judge, turn, dims)
-        # NA means "dimension not applicable this turn" — never coach or
-        # praise on it (a COMPUTED 60 stays applicable). Tip = weakest
-        # applicable dim (only if genuinely weak); highlight = strongest
-        # applicable dim (only if genuinely strong). NA emits as NEUTRAL.
-        applicable = [k for k in dims if dims[k] is not NA] or list(dims)
-        dims = {k: (NEUTRAL if v is NA else v) for k, v in dims.items()}
-        weakest = min(applicable, key=lambda k: (dims[k], k))
-        strongest = max(applicable, key=lambda k: (dims[k], k))
-        if dims[weakest] >= 70:
-            tip = rubric.GENERAL_TIPS[turn["index"] % len(rubric.GENERAL_TIPS)]
+        # NA means "dimension not applicable this turn". NA dims are OMITTED
+        # from the emitted event entirely (every consumer renders dims
+        # data-driven, so absence is the honest encoding): they no longer
+        # pollute radar/averages/XP as fake-neutral 60s, and a computed 60
+        # stays distinguishable because it's present. Tip = weakest applicable
+        # dim (only if genuinely weak); highlight = strongest applicable dim
+        # (only if genuinely strong).
+        dims = {k: v for k, v in dims.items() if v is not NA}
+        if dims:
+            weakest = min(dims, key=lambda k: (dims[k], k))
+            strongest = max(dims, key=lambda k: (dims[k], k))
+            if dims[weakest] >= 70:
+                tip = rubric.GENERAL_TIPS[turn["index"] % len(rubric.GENERAL_TIPS)]
+            else:
+                tip = rubric.pick_template(weakest, "tips", _tip_index(weakest, turn, ctx), ctx)
+            highlight = (rubric.pick_template(strongest, "highlights", turn["index"], ctx)
+                         if dims[strongest] >= 70 else "")
         else:
-            tip = rubric.pick_template(weakest, "tips", _tip_index(weakest, turn, ctx), ctx)
-        highlight = (rubric.pick_template(strongest, "highlights", turn["index"], ctx)
-                     if dims[strongest] >= 70 else "")
+            tip, highlight = rubric.GENERAL_TIPS[turn["index"] % len(rubric.GENERAL_TIPS)], ""
         results.append({
             "turn": turn["index"],
             "uuid": turn["uuid"],
             "prompt": turn["prompt"][:80],
             "dims": dims,
-            "weighted": round(rubric.weighted_average(dims), 1),
+            "weighted": round(rubric.weighted_average(dims), 1) if dims else 0.0,
             "xp": rubric.xp_for(dims),
             "tip": tip,
             "highlight": highlight,

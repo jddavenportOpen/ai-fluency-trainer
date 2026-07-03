@@ -134,8 +134,8 @@ def test_fake_judge(tmp):
                 if j["dims"][k] != expect:
                     blend_ok = False
                     print(f"    turn {b['turn']} {k}: got {j['dims'][k]} expected {expect}")
-            else:           # NA -> never judged, emits NEUTRAL like the baseline
-                if j["dims"][k] != b["dims"][k] or j["dims"][k] != engine.NEUTRAL:
+            else:           # NA -> never judged, omitted from both baseline & judged
+                if k in j["dims"] or k in b["dims"]:
                     na_ok = False
         for k in b["dims"]:
             if k not in engine.JUDGE_DIMS and j["dims"][k] != b["dims"][k]:
@@ -143,7 +143,7 @@ def test_fake_judge(tmp):
         if j["judged"] is not bool(heur):
             flag_ok = False
     check("50/50 blend math exact on all applicable judge dims", blend_ok)
-    check("NA judge dims never blended (stay NEUTRAL, identical to baseline)", na_ok)
+    check("NA judge dims never blended (omitted from both baseline & judged)", na_ok)
     check("non-judge dims untouched by the judge", other_ok)
     check("judged flag set exactly when >=1 dim blended", flag_ok)
     check("judge only ever receives applicable judge dims",

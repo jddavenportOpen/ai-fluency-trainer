@@ -69,13 +69,17 @@ def main():
     ge_count = 0
     strict_needed = {"context_setting", "verification", "diagnose_vs_retry"}
     strict_ok = True
-    for k in good["avg_dims"]:
+    shared = [k for k in good["avg_dims"] if k in bad["avg_dims"]]
+    for k in shared:
         g, b = good["avg_dims"][k], bad["avg_dims"][k]
         print(f"{k:<24}{g:>7.1f}{b:>7.1f}{g - b:>8.1f}")
         if g >= b:
             ge_count += 1
         if k in strict_needed and not g > b:
             strict_ok = False
+    # a strict-needed dim absent from either summary is a failure, not a skip
+    if not strict_needed.issubset(shared):
+        strict_ok = False
     gw, bw = good["weighted_avg"], bad["weighted_avg"]
     print(f"{'WEIGHTED OVERALL':<24}{gw:>7.1f}{bw:>7.1f}{gw - bw:>8.1f}")
 

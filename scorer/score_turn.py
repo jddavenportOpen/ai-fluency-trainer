@@ -223,20 +223,29 @@ def print_table(sid, results):
     header = f"{'turn':>4} " + " ".join(f"{short[k]:>5}" for k in keys) + f" {'wavg':>6} {'xp':>3}  prompt"
     print(header)
     print("-" * len(header))
+    # NA dims are omitted from a turn's dims; show "  · " so the table stays
+    # aligned and a not-applicable dim reads differently from a computed score.
     for r in results:
-        row = f"{r['turn']:>4} " + " ".join(f"{r['dims'][k]:>5}" for k in keys)
+        row = f"{r['turn']:>4} " + " ".join(
+            f"{r['dims'][k]:>5}" if k in r["dims"] else f"{'·':>5}" for k in keys)
         mark = "[J] " if r.get("judged") else ""
         print(f"{row} {r['weighted']:>6.1f} {r['xp']:>3}  {mark}{r['prompt'][:48]}")
     if results:
-        avg = {k: round(sum(r["dims"][k] for r in results) / len(results), 1) for k in keys}
+        # average each dim only over the turns where it applied (was present)
+        avg = {}
+        for k in keys:
+            vals = [r["dims"][k] for r in results if k in r["dims"]]
+            avg[k] = round(sum(vals) / len(vals), 1) if vals else None
         wavg = round(sum(r["weighted"] for r in results) / len(results), 2)
-        row = f"{'avg':>4} " + " ".join(f"{avg[k]:>5.0f}" for k in keys)
+        row = f"{'avg':>4} " + " ".join(
+            f"{avg[k]:>5.0f}" if avg[k] is not None else f"{'·':>5}" for k in keys)
         print(f"{row} {wavg:>6.1f}")
         for r in results:
             print(f"  turn {r['turn']} tip: {r['tip']}")
             print(f"  turn {r['turn']} highlight: {r['highlight']}")
         print("SUMMARY " + json.dumps({"sid": sid, "turns": len(results),
-                                       "avg_dims": avg, "weighted_avg": wavg}))
+                                       "avg_dims": {k: v for k, v in avg.items() if v is not None},
+                                       "weighted_avg": wavg}))
 
 
 def run_batch(path, sid_override=None, dry_run=False, use_judge=False):
