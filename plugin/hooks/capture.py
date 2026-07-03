@@ -28,6 +28,26 @@ def emit(sid, event, data):
         f.write(line + "\n")
 
 
+def _find_scorer():
+    """Marketplace installs copy plugin files away from the repo, so the
+    repo-relative path can break. Resolution order: explicit env var, sync
+    config, repo-relative (checkout / --plugin-dir), well-known checkout."""
+    candidates = [os.environ.get("AI_FLUENCY_SCORER", "")]
+    cfg = os.path.join(FLUENCY_DIR, "config.json")
+    try:
+        with open(cfg) as f:
+            candidates.append(json.load(f).get("scorer", ""))
+    except Exception:
+        pass
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates.append(os.path.normpath(os.path.join(here, "..", "..", "scorer", "score_turn.py")))
+    candidates.append(os.path.expanduser("~/code/ai-fluency-trainer/scorer/score_turn.py"))
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
 def main():
     payload = json.load(sys.stdin)
     hook = payload.get("hook_event_name", "")
@@ -60,10 +80,8 @@ def main():
         })
     elif hook == "Stop":
         emit(sid, "turn_end", {"transcript_path": transcript})
-        scorer = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                              "..", "..", "scorer", "score_turn.py")
-        scorer = os.path.normpath(scorer)
-        if os.path.exists(scorer):
+        scorer = _find_scorer()
+        if scorer:
             subprocess.Popen(
                 [sys.executable, scorer, "--session", sid, "--transcript", transcript],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

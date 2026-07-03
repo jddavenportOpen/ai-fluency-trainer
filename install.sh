@@ -25,7 +25,8 @@ claude plugin install ai-fluency@ai-fluency 2>/dev/null || echo "(plugin already
 mkdir -p "$FLUENCY_DIR"
 if [[ ! -f "$FLUENCY_DIR/config.json" ]]; then
   cat > "$FLUENCY_DIR/config.json" <<EOF
-{"url": "http://localhost:3000", "token": "dev-token-jd", "handle": "jd"}
+{"url": "http://localhost:3000", "token": "dev-token-jd", "handle": "jd",
+ "scorer": "$REPO/scorer/score_turn.py"}
 EOF
   echo "Wrote default sync config → $FLUENCY_DIR/config.json"
 fi
