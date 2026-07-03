@@ -1,0 +1,19 @@
+{"v":1,"ts":"2026-07-03T10:00:00Z","sid":"demo-1","event":"session_start","data":{"source":"startup","cwd_hash":"ab12cd","transcript_path":"/tmp/t1.jsonl"}}
+{"v":1,"ts":"2026-07-03T10:00:05Z","sid":"demo-1","event":"prompt","data":{"text":"Add a retry wrapper around the flaky API client, with tests","chars":59,"words":11}}
+{"v":1,"ts":"2026-07-03T10:00:20Z","sid":"demo-1","event":"tool_use","data":{"tool":"Read","ok":true,"input_keys":["file_path"]}}
+{"v":1,"ts":"2026-07-03T10:00:30Z","sid":"demo-1","event":"tool_use","data":{"tool":"Edit","ok":true,"input_keys":["file_path","old_string","new_string"]}}
+{"v":1,"ts":"2026-07-03T10:00:40Z","sid":"demo-1","event":"tool_use","data":{"tool":"Bash","ok":false,"input_keys":["command"]}}
+{"v":1,"ts":"2026-07-03T10:00:50Z","sid":"demo-1","event":"turn_end","data":{"transcript_path":"/tmp/t1.jsonl"}}
+{"v":1,"ts":"2026-07-03T10:00:51Z","sid":"demo-1","event":"turn_score","data":{"turn":1,"dims":{"context_setting":55,"verification_behavior":30,"scope_discipline":70},"xp":40,"tip":"You accepted the diff without running the tests — ask for a test run first.","highlight":"Clear, scoped ask with acceptance criteria."}}
+this line is not json and must be skipped silently
+{"v":1,"ts":"2026-07-03T10:02:00Z","sid":"demo-1","event":"prompt","data":{"text":"Run the test suite and fix whatever fails","chars":41,"words":8}}
+{"v":1,"ts":"2026-07-03T10:02:30Z","sid":"demo-1","event":"turn_score","data":{"turn":2,"dims":{"context_setting":60,"verification_behavior":65,"iteration_quality":58},"xp":55,"tip":"Ask why the test failed before requesting a fix — build your own model.","highlight":"You verified the change by running the suite."}}
+{"v":1,"ts":"2026-07-03T10:04:00Z","sid":"demo-1","event":"turn_score","data":{"turn":3,"dims":{"context_setting":72,"verification_behavior":70,"diagnosis_vs_retry":66},"xp":70,"tip":"Consider a plan step before multi-file edits.","highlight":"Diagnosed the root cause instead of blind-retrying."}}
+{"v":1,"ts":"2026-07-03T10:05:00Z","sid":"demo-1","event":"session_end","data":{"reason":"clear"}}
+{"v":1,"ts":"2026-07-03T11:00:00Z","sid":"demo-2","event":"session_start","data":{"source":"startup","cwd_hash":"ab12cd","transcript_path":"/tmp/t2.jsonl"}}
+{"v":1,"ts":"2026-07-03T11:00:10Z","sid":"demo-2","event":"prompt","data":{"text":"Plan the migration to the new config format before touching code","chars":64,"words":11}}
+{"v":1,"ts":"2026-07-03T11:01:00Z","sid":"demo-2","event":"turn_score","data":{"turn":1,"dims":{"plan_before_build":85,"context_setting":78,"scope_discipline":80},"xp":80,"tip":"Great plan — now pin it with a checklist the agent updates as it goes.","highlight":"Planned before building; scoped the change tightly."}}
+{"v":1,"ts":"2026-07-03T11:03:00Z","sid":"demo-2","event":"tool_use","data":{"tool":"Bash","ok":true,"input_keys":["command"]}}
+{"v":1,"ts":"2026-07-03T11:03:30Z","sid":"demo-2","event":"turn_score","data":{"turn":2,"dims":{"verification_behavior":88,"iteration_quality":75,"learning_signals":70},"xp":90,"tip":"Read the diff yourself before approving — one skim catches drift.","highlight":"Asked 'why' about the failing case — strong learning signal."}}
+{"v":1,"ts":"2026-07-03T11:05:00Z","sid":"demo-2","event":"turn_score","data":{"turn":3,"dims":{"verification_behavior":92,"diagnosis_vs_retry":85,"independence":80},"xp":100,"tip":"Try delegating the full workplan next time instead of step-by-step.","highlight":"Independently sanity-checked the agent's claim against the code."}}
+{"v":1,"ts":"2026-07-03T11:06:00Z","sid":"demo-2","event":"session_end","data":{"reason":"exit"}}
