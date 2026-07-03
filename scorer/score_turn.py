@@ -129,6 +129,44 @@ class SessionLock:
         return False
 
 
+# ------------------------------------------------------------ session kind ----
+def session_kind(sid, transcript):
+    """"interactive" | "headless" | "unknown". Checks the capture hook's cache
+    first, else peeks the transcript's entrypoint field ("cli" = interactive
+    human session; sdk-cli/sdk-py/... = headless agent or one-shot)."""
+    safe = "".join(c if (c.isalnum() or c in "-_.") else "_" for c in sid) or "unknown"
+    try:
+        with open(os.path.join(fluency_dir(), "state", f"kind-{safe}.json")) as f:
+            k = json.load(f).get("kind")
+        if k in ("interactive", "headless"):
+            return k
+    except Exception:
+        pass
+    try:
+        with open(transcript) as f:
+            for i, line in enumerate(f):
+                if i > 100:
+                    break
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                ep = rec.get("entrypoint")
+                if ep:
+                    return "interactive" if ep == "cli" else "headless"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def score_all_configured():
+    try:
+        with open(os.path.join(fluency_dir(), "config.json")) as f:
+            return bool(json.load(f).get("score_all_sessions"))
+    except Exception:
+        return False
+
+
 # ------------------------------------------------------------------ modes ----
 def run_incremental(sid, transcript):
     turns = engine.parse_transcript(transcript)
@@ -190,11 +228,21 @@ def main(argv=None):
     ap.add_argument("--batch", help="transcript path (batch mode)")
     ap.add_argument("--sid-override", help="override sid in batch mode")
     ap.add_argument("--dry-run", action="store_true", help="batch: print only, no events")
+    ap.add_argument("--force", action="store_true",
+                    help="incremental: score even non-interactive sessions")
     args = ap.parse_args(argv)
 
     if args.batch:
         run_batch(args.batch, args.sid_override, args.dry_run)
     elif args.session and args.transcript:
+        # Only interactive human sessions are scored by default: agents, fleet
+        # workers and claude -p one-shots must never inflate the fluency score.
+        if not args.force and not score_all_configured():
+            kind = session_kind(args.session, args.transcript)
+            if kind != "interactive":
+                log(f"skip sid={args.session}: kind={kind} (non-interactive; "
+                    f"use --force or score_all_sessions to override)")
+                return
         run_incremental(args.session, args.transcript)
     else:
         ap.print_usage()

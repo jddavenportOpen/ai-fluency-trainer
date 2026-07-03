@@ -6,6 +6,11 @@ Reads ~/.ai-fluency/events.jsonl and uploads ONLY derived/aggregate event types
 leave the machine — their text field is the user's own words and stays local.
 Even for synced session events, transcript paths are stripped.
 
+Only INTERACTIVE human sessions are synced by default (sid kind derived from
+session_start/session_kind events; legacy events backfilled from the transcript
+entrypoint field). Headless/unknown sids (claude -p, SDK, fleet/workflow
+agents) are excluded unless config sync_all_sessions=true.
+
 Config: ~/.ai-fluency/config.json
   {"url": "http://localhost:3000", "token": "dev-token-jd", "handle": "jd"}
 State:  ~/.ai-fluency/sync_state.json  (count of events already examined)
@@ -41,6 +46,55 @@ def sanitize(ev):
             "event": ev.get("event"), "data": data}
 
 
+def _peek_transcript_kind(transcript):
+    """Legacy backfill: classify a session by its transcript's entrypoint field
+    ("cli" = interactive human session; sdk-* = headless agent/one-shot)."""
+    try:
+        with open(os.path.expanduser(transcript)) as f:
+            for i, line in enumerate(f):
+                if i > 100:
+                    break
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                ep = rec.get("entrypoint")
+                if ep:
+                    return "interactive" if ep == "cli" else "headless"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def build_kind_map(events_path):
+    """sid -> "interactive"|"headless"|"unknown", derived from session_start /
+    session_kind events across the WHOLE file (classification must not depend on
+    the sync offset). session_start events without a kind tag (written before
+    kind-tagging shipped) are backfilled by peeking their transcript."""
+    kinds = {}
+    try:
+        with open(events_path) as f:
+            for line in f:
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    continue
+                if ev.get("event") not in ("session_start", "session_kind"):
+                    continue
+                sid = ev.get("sid")
+                data = ev.get("data") or {}
+                kind = data.get("kind")
+                if not kind and ev.get("event") == "session_start":
+                    kind = _peek_transcript_kind(data.get("transcript_path", ""))
+                if kind in ("interactive", "headless"):
+                    kinds[sid] = kind        # later resolutions win
+                else:
+                    kinds.setdefault(sid, "unknown")
+    except FileNotFoundError:
+        pass
+    return kinds
+
+
 def main():
     dry = "--dry-run" in sys.argv
     full = "--full" in sys.argv
@@ -50,8 +104,13 @@ def main():
         print(f"sync: no config at {CONFIG} — create it with url/token/handle", file=sys.stderr)
         return 1
 
+    # Only interactive human sessions sync by default — headless/unknown sids
+    # (claude -p, SDK runs, fleet/workflow agents) never inflate the dashboard.
+    sync_all = bool(cfg.get("sync_all_sessions"))
+    kinds = {} if sync_all else build_kind_map(EVENTS)
+
     seen = 0 if full else load_json(STATE, {}).get("examined", 0)
-    batch, examined = [], 0
+    batch, examined, skipped = [], 0, 0
     try:
         with open(EVENTS) as f:
             for i, line in enumerate(f):
@@ -62,18 +121,27 @@ def main():
                     ev = json.loads(line)
                 except Exception:
                     continue
-                if ev.get("event") in SYNCABLE:
-                    batch.append(sanitize(ev))
+                if ev.get("event") not in SYNCABLE:
+                    continue
+                if not sync_all and kinds.get(ev.get("sid")) != "interactive":
+                    skipped += 1
+                    continue
+                batch.append(sanitize(ev))
     except FileNotFoundError:
         print("sync: no events file yet — nothing to do")
         return 0
 
     if not batch:
-        print(f"sync: up to date ({examined} events examined, 0 new syncable)")
+        print(f"sync: up to date ({examined} events examined, 0 new syncable, "
+              f"{skipped} non-interactive skipped)")
         return 0
 
     if dry:
-        print(f"sync (dry-run): would upload {len(batch)} events to {cfg['url']}/api/ingest")
+        sids = sorted({e['sid'] for e in batch})
+        print(f"sync (dry-run): would upload {len(batch)} events from "
+              f"{len(sids)} interactive session(s) to {cfg['url']}/api/ingest "
+              f"({skipped} events from non-interactive/unknown sids skipped)")
+        print("sids:", json.dumps(sids))
         print(json.dumps(batch[:3], indent=1))
         return 0
 
@@ -96,8 +164,8 @@ def main():
 
     with open(STATE, "w") as f:
         json.dump({"examined": examined}, f)
-    print(f"sync: uploaded {len(batch)} events (server stored {body.get('stored')}) — "
-          f"{cfg['url']}/dashboard")
+    print(f"sync: uploaded {len(batch)} events (server stored {body.get('stored')}, "
+          f"{skipped} non-interactive skipped) — {cfg['url']}/dashboard")
     return 0
 
 
