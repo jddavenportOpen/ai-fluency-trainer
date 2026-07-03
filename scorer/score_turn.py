@@ -25,7 +25,19 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import engine   # noqa: E402
+import judge as judge_mod   # noqa: E402
 import rubric   # noqa: E402
+
+
+def active_judge():
+    """The judge callable when enabled (config 'judge': true or
+    AI_FLUENCY_JUDGE=1), else None. Fail-open: never raises."""
+    try:
+        if judge_mod.is_enabled():
+            return judge_mod.judge_turn
+    except Exception:
+        pass
+    return None
 
 
 def fluency_dir():
@@ -52,10 +64,13 @@ def append_events(sid, results):
     os.makedirs(d, exist_ok=True)
     lines = []
     for r in results:
+        data = {"turn": r["turn"], "dims": r["dims"], "xp": r["xp"],
+                "tip": r["tip"], "highlight": r["highlight"]}
+        if r.get("judged"):
+            data["judged"] = True
         lines.append(json.dumps({
             "v": 1, "ts": now_ts(), "sid": sid, "event": "turn_score",
-            "data": {"turn": r["turn"], "dims": r["dims"], "xp": r["xp"],
-                     "tip": r["tip"], "highlight": r["highlight"]},
+            "data": data,
         }, ensure_ascii=False))
     if lines:
         with open(os.path.join(d, "events.jsonl"), "a") as f:
@@ -170,7 +185,19 @@ def score_all_configured():
 # ------------------------------------------------------------------ modes ----
 def run_incremental(sid, transcript):
     turns = engine.parse_transcript(transcript)
-    results = engine.score_session(turns)
+    # Incremental re-scores the whole session on every Stop (rolling state
+    # needs the full history) and dedups emitted events by uuid. The judge is
+    # the expensive part, so never re-judge a turn that was already scored.
+    judge = active_judge()
+    if judge is not None:
+        already = set(load_state(sid)["scored"])
+        base = judge
+
+        def judge(turn, heuristic_dims):
+            if turn.get("uuid") in already:
+                return None
+            return base(turn, heuristic_dims)
+    results = engine.score_session(turns, judge=judge)
     if not results:
         log(f"incremental sid={sid}: no complete turns in {transcript}")
         return
@@ -198,7 +225,8 @@ def print_table(sid, results):
     print("-" * len(header))
     for r in results:
         row = f"{r['turn']:>4} " + " ".join(f"{r['dims'][k]:>5}" for k in keys)
-        print(f"{row} {r['weighted']:>6.1f} {r['xp']:>3}  {r['prompt'][:48]}")
+        mark = "[J] " if r.get("judged") else ""
+        print(f"{row} {r['weighted']:>6.1f} {r['xp']:>3}  {mark}{r['prompt'][:48]}")
     if results:
         avg = {k: round(sum(r["dims"][k] for r in results) / len(results), 1) for k in keys}
         wavg = round(sum(r["weighted"] for r in results) / len(results), 2)
@@ -211,10 +239,13 @@ def print_table(sid, results):
                                        "avg_dims": avg, "weighted_avg": wavg}))
 
 
-def run_batch(path, sid_override=None, dry_run=False):
+def run_batch(path, sid_override=None, dry_run=False, use_judge=False):
+    if use_judge:
+        # --judge overrides the config/env gate for this process only
+        os.environ["AI_FLUENCY_JUDGE"] = "1"
     turns = engine.parse_transcript(path)
     sid = sid_override or (turns[0]["sid"] if turns else "batch-unknown")
-    results = engine.score_session(turns)
+    results = engine.score_session(turns, judge=active_judge())
     print_table(sid, results)
     if not dry_run and results:
         append_events(sid, results)
@@ -230,10 +261,12 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="batch: print only, no events")
     ap.add_argument("--force", action="store_true",
                     help="incremental: score even non-interactive sessions")
+    ap.add_argument("--judge", action="store_true",
+                    help="batch: blend LLM-judge scores into the judge dims")
     args = ap.parse_args(argv)
 
     if args.batch:
-        run_batch(args.batch, args.sid_override, args.dry_run)
+        run_batch(args.batch, args.sid_override, args.dry_run, use_judge=args.judge)
     elif args.session and args.transcript:
         # Only interactive human sessions are scored by default: agents, fleet
         # workers and claude -p one-shots must never inflate the fluency score.

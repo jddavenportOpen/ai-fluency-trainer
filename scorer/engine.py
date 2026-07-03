@@ -446,9 +446,40 @@ def _tip_index(dim_key, turn, ctx):
     return i
 
 
-def score_session(turns, only_complete=True):
+# The 3 judgment-heavy dims an optional LLM judge may refine (see judge.py).
+JUDGE_DIMS = ("understanding_seeking", "diagnose_vs_retry", "context_setting")
+
+
+def _apply_judge(judge, turn, dims):
+    """Blend judge scores 50/50 into the applicable judge dims. NA dims are
+    never judged. Fail-open: any judge error leaves heuristics untouched.
+    Returns True if at least one dim was blended."""
+    applicable = {k: dims[k] for k in JUDGE_DIMS if dims[k] is not NA}
+    if not applicable:
+        return False
+    try:
+        j = judge(turn, applicable)
+    except Exception:
+        return False
+    if not isinstance(j, dict):
+        return False
+    blended = False
+    for k, h in applicable.items():
+        v = j.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            continue
+        dims[k] = _clamp((h + max(0, min(100, v))) / 2.0)
+        blended = True
+    return blended
+
+
+def score_session(turns, only_complete=True, judge=None):
     """Score all turns in order (session-rolling state). Returns list of dicts:
-    {turn, uuid, prompt, dims, weighted, xp, tip, highlight}."""
+    {turn, uuid, prompt, dims, weighted, xp, tip, highlight, judged}.
+
+    `judge`: optional callable(turn, heuristic_dims) -> {dim: 0-100} | None.
+    When it returns scores, they are blended 50/50 with the heuristic for the
+    judge dims (rounded to int). NA dims stay NA. Fail-open throughout."""
     state = new_session_state()
     results = []
     for turn in turns:
@@ -468,6 +499,10 @@ def score_session(turns, only_complete=True):
             "scope_discipline": score_scope_discipline(turn, ctx),
             "iteration_discipline": score_iteration_discipline(turn, ctx, state),
         }
+        judged = False
+        if judge is not None:
+            turn["prev_prompt"] = state["prev_prompt"]   # judge sees the prior prompt
+            judged = _apply_judge(judge, turn, dims)
         # NA means "dimension not applicable this turn" — never coach or
         # praise on it (a COMPUTED 60 stays applicable). Tip = weakest
         # applicable dim (only if genuinely weak); highlight = strongest
@@ -491,6 +526,7 @@ def score_session(turns, only_complete=True):
             "xp": rubric.xp_for(dims),
             "tip": tip,
             "highlight": highlight,
+            "judged": judged,
         })
         # roll state forward
         state["prev_prompt"] = turn["prompt"]
