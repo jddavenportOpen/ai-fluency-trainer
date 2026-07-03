@@ -24,50 +24,58 @@ import {
 const HANDLE = "jd";
 const TOKEN = process.env.INGEST_TOKEN || "dev-token-jd";
 
-// Dimension keys are data-driven by contract; this is just what the demo data uses.
+// The CANONICAL 7 dimensions the real scorer emits (scorer/rubric.py). The demo
+// profile MUST use these exact keys or /u/jd looks structurally unlike every
+// real profile and the dashboard's advice/weights fall through to generics.
 const DIMS = [
   "context_setting",
+  "plan_first",
   "verification",
-  "delegation_quality",
-  "iteration_discipline",
+  "diagnose_vs_retry",
+  "understanding_seeking",
   "scope_discipline",
-  "plan_before_build",
+  "iteration_discipline",
 ] as const;
 
 const TIPS: Record<(typeof DIMS)[number], string[]> = {
   context_setting: [
     "Name the exact files and constraints up front — the agent read 4 wrong files before finding auth.py.",
-    "Paste the error text instead of describing it; verbatim beats paraphrase.",
+    "Open like a brief to a new teammate: the goal, the files, one constraint sentence.",
+  ],
+  plan_first: [
+    "Ask for a plan (or use plan mode) before the first edit on multi-file work.",
+    "A 30-second plan review caught a schema mismatch last time — keep doing it.",
   ],
   verification: [
     "You accepted the diff without running tests — ask for a test run before moving on.",
     "Ask the agent to prove the fix with a repro command, not just claim it.",
   ],
-  delegation_quality: [
-    "Split 'build the dashboard' into scoped turns — one component per ask lands cleaner.",
-    "State the acceptance criteria in the prompt so the agent can self-check.",
+  diagnose_vs_retry: [
+    "'It doesn't work' triggers blind retries — paste the error text and a hypothesis.",
+    "After a failure, add new information before retrying, not the same prompt again.",
   ],
-  iteration_discipline: [
-    "'It doesn't work' triggers blind retries — describe WHAT failed and where.",
-    "After two failed attempts, stop and ask for a diagnosis before retry #3.",
+  understanding_seeking: [
+    "Once in a while, ask why the agent chose an approach — anchored curiosity, not ritual.",
+    "You delegate the typing well; delegate less of the thinking on the calls that matter.",
   ],
   scope_discipline: [
     "The agent refactored 3 unrelated files — add 'surgical changes only' to the ask.",
-    "Pin the blast radius: name the files the agent may touch.",
+    "One coherent task per prompt keeps every diff reviewable.",
   ],
-  plan_before_build: [
-    "Ask for a short plan and review it before any code is written on multi-file work.",
-    "A 30-second plan review caught a schema mismatch last time — keep doing it.",
+  iteration_discipline: [
+    "A bare 'ok' accepts with zero scrutiny — read the diff and push back on one thing.",
+    "You caught a real bug the agent missed last session — that's the strongest signal there is.",
   ],
 };
 
 const HIGHLIGHTS: Record<(typeof DIMS)[number], string[]> = {
   context_setting: ["Named the exact files and constraints before asking for code."],
+  plan_first: ["Requested a plan first and caught an API mismatch in review."],
   verification: ["Ran the test suite before accepting the change.", "Asked for a repro command and checked the output."],
-  delegation_quality: ["Scoped the ask to one component with clear acceptance criteria."],
-  iteration_discipline: ["Reported the exact failing assertion instead of 'try again'."],
+  diagnose_vs_retry: ["Reported the exact failing assertion instead of 'try again'."],
+  understanding_seeking: ["Asked why the middleware ordering mattered — learning, not just shipping."],
   scope_discipline: ["Pinned the blast radius to two files — the diff stayed surgical."],
-  plan_before_build: ["Requested a plan first and caught an API mismatch in review."],
+  iteration_discipline: ["Read the diff and pushed back on an edge case the agent missed."],
 };
 
 /** Deterministic pseudo-random so the seed is stable run-to-run. */
@@ -120,7 +128,8 @@ function buildSession(
         // give each dim a personality so the radar isn't a circle
         const personality =
           d === "verification" ? -18 : d === "iteration_discipline" ? -10 :
-          d === "context_setting" ? 12 : d === "plan_before_build" ? -4 : 5;
+          d === "context_setting" ? 12 : d === "plan_first" ? -4 :
+          d === "diagnose_vs_retry" ? -6 : d === "understanding_seeking" ? 3 : 5;
         dims[d] = Math.max(5, Math.min(98, Math.round(base + spread + personality)));
       }
     }

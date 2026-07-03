@@ -48,7 +48,7 @@ PLAN_LANG_RE = re.compile(
 # `echo done and make sure it is fine` would score as a test run.
 _VERIFY_HEAD = {
     "pytest", "tsc", "rspec", "jest", "vitest", "gradle", "phpunit", "ruff",
-    "flake8", "mypy", "eslint", "gcc", "clang", "curl", "make", "node",
+    "flake8", "mypy", "eslint", "gcc", "clang", "curl", "node",
     "python", "python3", "ruby",
 }
 _VERIFY_HEAD2 = {  # first token -> allowed second tokens
@@ -57,6 +57,9 @@ _VERIFY_HEAD2 = {  # first token -> allowed second tokens
     "bun": {"test", "run"}, "deno": {"test", "run"}, "npx": None,
     "mvn": {"test", "verify", "package"}, "dotnet": {"test", "build"},
 }
+# `make` is both a build tool and an English verb ("make sure it works"), so it
+# needs a target/flag, never an English word, as its argument to count.
+_MAKE_STOPWORDS = {"sure", "certain", "it", "that", "this", "them", "a", "the", "your", "me"}
 _SEGMENT_SPLIT_RE = re.compile(r"&&|\|\||[;|\n]")
 _ENV_ASSIGN_RE = re.compile(r"^\w+=\S*$")
 
@@ -67,6 +70,12 @@ def is_verify_command(cmd):
         if not toks:
             continue
         head = toks[0].rsplit("/", 1)[-1]
+        if head == "make":
+            # bare `make`, or `make <target/-flag>` — but not `make sure ...`
+            nxt = toks[1] if len(toks) > 1 else ""
+            if not nxt or (nxt not in _MAKE_STOPWORDS):
+                return True
+            continue
         if head in _VERIFY_HEAD:
             return True
         if head in _VERIFY_HEAD2:
@@ -127,6 +136,28 @@ SCOPE_VERBS = {
 }
 ALSO_RE = re.compile(r"\balso\b|\band then\b|\bas well as\b|\bplus\b|\bwhile you'?re at it\b|\bon top of that\b", re.I)
 AND_CHAIN_RE = re.compile(r"\band (?:the )?\w+", re.I)
+
+
+# A machine-injected agent bootstrap ("You are the X agent…", a fleet/workflow
+# system prompt delivered as the first user turn). These are NOT things the
+# human typed, so scoring them inflates the profile with the harness's words.
+# Only ever applied to a session's FIRST turn.
+_BOOTSTRAP_RE = re.compile(
+    r"^\s*(?:you are (?:the |now |an? )?[\w'-]+ (?:agent|assistant|subagent)\b"
+    r"|you are (?:now )?(?:working on|shipping|responsible for)\b"
+    r"|<system-reminder>|you are a (?:research|coding|workflow) subagent\b"
+    r"|your task is to\b.{0,80}\bagent\b)",
+    re.I,
+)
+
+
+def _is_agent_bootstrap(text):
+    """True if this first-turn prompt looks machine-injected, not human-typed."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    # very long single-block instructions with an agent-identity opener
+    return bool(_BOOTSTRAP_RE.search(t)) or (len(t) > 1500 and t.lower().startswith("you are"))
 
 
 # ------------------------------------------------------------ turn parsing ----
@@ -196,16 +227,23 @@ def parse_transcript(path):
         if rec.get("isMeta"):
             continue
         if _is_turn_start(rec):
+            prompt = _prompt_text(rec)
+            # The first turn of an agent/fleet session is a machine-injected
+            # bootstrap prompt, not human input — mark it so scoring skips it
+            # (it would otherwise score high context_setting on the harness's
+            # own words and inflate the profile).
+            is_bootstrap = len(turns) == 0 and _is_agent_bootstrap(prompt)
             current = {
                 "index": len(turns) + 1,
                 "uuid": rec.get("uuid") or rec.get("promptId") or f"turn-{len(turns) + 1}",
-                "prompt": _prompt_text(rec),
+                "prompt": prompt,
                 "tools": [],
                 "n_records": 0,
                 "complete": False,
                 "sid": rec.get("sessionId", ""),
                 "next_prompt": None,
                 "permission_mode": rec.get("permissionMode", ""),
+                "bootstrap": is_bootstrap,
             }
             turns.append(current)
             continue
@@ -268,9 +306,11 @@ def score_context_setting(turn, ctx):
         score = min(score, 10)
     # Fit-to-task: a conceptual question with no mutation requested doesn't
     # need file paths and constraints — don't punish pure Q&A for brevity.
-    is_question = "?" in p or bool(UNDERSTANDING_RE.search(p))
+    # But require real substance: a bare "?" / "ok?" is not a conceptual
+    # question and must still fall through to the brevity floors.
+    is_question = (("?" in p and words >= 4) or bool(UNDERSTANDING_RE.search(p)))
     turn_mutates = any(t["name"] in MUTATING_TOOLS for t in turn["tools"])
-    if is_question and not turn_mutates and not bare_imperative:
+    if is_question and not turn_mutates and not bare_imperative and words >= 4:
         score = max(score, 55)
     ctx.update(words=words, files=files, constraints=constraints,
                opener=" ".join(p.split()[:4]), bare_imperative=bare_imperative)
@@ -280,8 +320,12 @@ def score_context_setting(turn, ctx):
 def score_plan_first(turn, ctx, state):
     p = turn["prompt"]
     # Plan-mode usage is the platform-native version of the behavior this
-    # dimension measures (research row #1) — stronger signal than keywords.
-    plan_lang = bool(PLAN_LANG_RE.search(p)) or turn.get("permission_mode") == "plan"
+    # dimension measures (research row #1) — a stronger signal than keywords.
+    # Detect it two ways: permissionMode on the turn, or an ExitPlanMode tool
+    # call (the assistant leaving plan mode = the user planned first).
+    used_plan_mode = (turn.get("permission_mode") == "plan"
+                      or any(t["name"] == "ExitPlanMode" for t in turn["tools"]))
+    plan_lang = bool(PLAN_LANG_RE.search(p)) or used_plan_mode
     tool_names = [t["name"] for t in turn["tools"]]
     mut_idx = next((i for i, n in enumerate(tool_names) if n in MUTATING_TOOLS), None)
     turn_mutates = mut_idx is not None
@@ -491,6 +535,12 @@ def score_session(turns, only_complete=True, judge=None):
             # zero records followed) must never stall later turns. The skipped
             # turn just doesn't feed rolling state; a dangling FINAL prompt is
             # the same skip and gets scored on the next Stop once records follow.
+            continue
+        if turn.get("bootstrap"):
+            # Machine-injected agent bootstrap (not human input): never scored.
+            # It still rolls state forward so the next (human) turn sees it.
+            state["prev_prompt"] = turn["prompt"]
+            state["prev_tool_error"] = any(not t["ok"] for t in turn["tools"])
             continue
         ctx = {}
         dims = {

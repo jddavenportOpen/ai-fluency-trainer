@@ -216,6 +216,10 @@ function validateBatch(events: IngestEvent[]): { events: ValidEvent[]; scores: V
     if (!ev || typeof ev !== "object") continue;
     const { ts, sid, event } = ev;
     if (typeof ts !== "string" || typeof sid !== "string" || typeof event !== "string") continue;
+    // ts must be a real date (else it breaks chronological sort + renders as a
+    // chart label); sid/event length-capped so a hostile client can't bloat rows.
+    if (!Number.isFinite(Date.parse(ts))) continue;
+    if (sid.length > 128 || sid.length === 0 || event.length > 64) continue;
     const rawData = ev.data && typeof ev.data === "object" ? (ev.data as Record<string, unknown>) : {};
     const data = Object.fromEntries(
       Object.entries(rawData).filter(([k]) => !SERVER_STRIP_KEYS.has(k))
@@ -506,17 +510,38 @@ export async function deleteSession(tokenHash: string): Promise<void> {
   getSqlite().prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
 }
 
+// PostgREST caps each response (default 1000); page through so a heavy user's
+// full history is returned, not silently truncated.
+const PAGE = 1000;
+
+async function sbPageAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  label: string
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build(from, from + PAGE - 1);
+    throwOn(error, label);
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function turnScoresFor(userId: number): Promise<TurnScoreRow[]> {
   if (useSupabase()) {
-    const { data, error } = await getSb()
-      .from("aif_turn_scores")
-      .select("*")
-      .eq("user_id", userId)
-      .order("ts", { ascending: true })
-      .order("id", { ascending: true })
-      .range(0, 9999);
-    throwOn(error, "turnScoresFor");
-    return (data ?? []) as TurnScoreRow[];
+    return sbPageAll<TurnScoreRow>(
+      (from, to) =>
+        getSb()
+          .from("aif_turn_scores")
+          .select("*")
+          .eq("user_id", userId)
+          .order("ts", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      "turnScoresFor"
+    );
   }
   return getSqlite()
     .prepare("SELECT * FROM turn_scores WHERE user_id = ? ORDER BY ts ASC, id ASC")
@@ -527,14 +552,18 @@ export async function sessionCountFor(userId: number): Promise<number> {
   if (useSupabase()) {
     const s = getSb();
     const [a, b] = await Promise.all([
-      s.from("aif_events").select("sid").eq("user_id", userId).range(0, 9999),
-      s.from("aif_turn_scores").select("sid").eq("user_id", userId).range(0, 9999),
+      sbPageAll<{ sid: string }>(
+        (from, to) => s.from("aif_events").select("sid").eq("user_id", userId).range(from, to),
+        "sessionCountFor.events"
+      ),
+      sbPageAll<{ sid: string }>(
+        (from, to) => s.from("aif_turn_scores").select("sid").eq("user_id", userId).range(from, to),
+        "sessionCountFor.scores"
+      ),
     ]);
-    throwOn(a.error, "sessionCountFor.events");
-    throwOn(b.error, "sessionCountFor.scores");
     const sids = new Set<string>();
-    for (const r of a.data ?? []) sids.add((r as { sid: string }).sid);
-    for (const r of b.data ?? []) sids.add((r as { sid: string }).sid);
+    for (const r of a) sids.add(r.sid);
+    for (const r of b) sids.add(r.sid);
     return sids.size;
   }
   const row = getSqlite()

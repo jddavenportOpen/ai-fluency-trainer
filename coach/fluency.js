@@ -255,8 +255,13 @@ function runLive(file) {
       return; // not created yet
     }
     if (st.size < offset) {
-      offset = 0; // file truncated/rotated — start over
+      // Truncated/rotated: RE-SEED the running total from the new file instead
+      // of appending fresh events onto the stale seeded xp (which would render
+      // a nonsense sum). Matches the desktop app's re-seed behavior.
+      offset = 0;
       partial = '';
+      state.xp = aggregate(readEvents(file)).xp;
+      state.level = levelFor(state.xp);
     }
     if (st.size === offset) return;
     let fd;
