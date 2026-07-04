@@ -1,6 +1,6 @@
 {
   "name": "fluency-coach",
-  "productName": "Fluency Coach",
+  "productName": "Clawdacademy",
   "version": "0.1.0",
   "description": "Live coaching sidebar for Claude Code — XP, levels, per-turn feedback (desktop)",
   "main": "main.js",
@@ -16,8 +16,8 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.aifluency.fluencycoach",
-    "productName": "Fluency Coach",
+    "appId": "com.clawdacademy.coach",
+    "productName": "Clawdacademy",
     "directories": {
       "output": "dist"
     },

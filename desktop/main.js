@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Fluency Coach — desktop sibling of coach/fluency.js.
+ * Clawdacademy — desktop sibling of coach/fluency.js.
  *
  * Modes (env):
  *   (default)          live-tail $AI_FLUENCY_DIR/events.jsonl (default ~/.ai-fluency)
@@ -96,7 +96,7 @@ function createWindow() {
     height: 780,
     minWidth: 360,
     minHeight: 520,
-    title: 'Fluency Coach',
+    title: 'Clawdacademy',
     backgroundColor: '#0b0e14',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
