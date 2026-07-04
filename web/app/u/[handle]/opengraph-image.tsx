@@ -4,10 +4,10 @@ import { fluencyRating, dimAverages, prettifyDim } from "@/lib/stats";
 
 /**
  * Rendered 1200x630 OG card (PRD-02 §4.1) - the scroll-stopper. Computed
- * server-side from stored scores only (no query-param forgery). Renders the
- * Rating + band + weakest habit (the sting) + the local-first privacy tag that
- * travels ON the shared artifact itself. Satori rule: any element with more
- * than one child (incl. text + interpolation) must set display:flex.
+ * server-side from stored scores only (no query-param forgery). ONE unified,
+ * Satori-safe render: single-string text nodes only (no inline span/gap/
+ * letterSpacing/baseline - Satori chokes on multi-child text and some props).
+ * Data errors fall back to the claim card, never a 500.
  */
 export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
@@ -28,55 +28,66 @@ function Wordmark() {
 
 export default async function Image({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const user = await getUserByHandle(handle).catch(() => undefined);
 
-  if (!user) {
-    return new ImageResponse(
-      (
-        <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: BG, padding: 70, fontFamily: "sans-serif" }}>
-          <Wordmark />
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 60, fontWeight: 800, color: "#e6edf3" }}>Claim your Clawdacademy profile</div>
-            <div style={{ fontSize: 30, color: MUTED, marginTop: 16 }}>Measure how well you actually work with AI, from your real Claude Code sessions.</div>
-          </div>
-          <div style={{ fontSize: 26, color: MUTED }}>clawdacademy.app  ·  local-first · open source</div>
-        </div>
-      ),
-      { ...size }
-    );
+  let bigNum: string | null = null;
+  let headline = "Claim your Clawdacademy profile";
+  let sub = "Measure how well you actually work with AI, from your real Claude Code sessions.";
+  let handleLine = "";
+
+  try {
+    const user = await getUserByHandle(handle);
+    if (user) {
+      const scores = await turnScoresFor(user.id);
+      const rating = fluencyRating(scores);
+      const weakest = Object.entries(dimAverages(scores)).sort((a, b) => a[1] - b[1])[0];
+      const weakLabel = weakest ? prettifyDim(weakest[0]) : null;
+      bigNum = String(rating.score);
+      headline = rating.band + (rating.established ? "" : " · provisional");
+      sub = weakLabel
+        ? `Weakest habit: ${weakLabel}`
+        : "Most devs over-rate themselves. Here is the measured number.";
+      handleLine = `@${user.handle}`;
+    }
+  } catch {
+    /* fall back to claim card, never 500 */
   }
-
-  const scores = await turnScoresFor(user.id);
-  const rating = fluencyRating(scores);
-  const weakest = Object.entries(dimAverages(scores)).sort((a, b) => a[1] - b[1])[0];
-  const weakLabel = weakest ? prettifyDim(weakest[0]) : null;
-  const bandLine = rating.band + (rating.established ? "" : " · provisional");
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", background: BG, padding: 70, fontFamily: "sans-serif" }}>
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          background: BG,
+          padding: 70,
+          fontFamily: "sans-serif",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Wordmark />
-          <div style={{ fontSize: 26, color: MUTED }}>{`@${user.handle}`}</div>
+          <div style={{ fontSize: 26, color: MUTED }}>{handleLine}</div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 26, color: MUTED, letterSpacing: 3 }}>FLUENCY RATING</div>
-          <div style={{ display: "flex", alignItems: "baseline" }}>
-            <div style={{ fontSize: 200, fontWeight: 800, color: ACCENT, lineHeight: 1 }}>{rating.score}</div>
-            <div style={{ fontSize: 54, fontWeight: 700, color: "#e6edf3", marginLeft: 24 }}>{bandLine}</div>
+          <div style={{ fontSize: 26, color: MUTED }}>{bigNum ? "FLUENCY RATING" : ""}</div>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            {bigNum ? (
+              <div style={{ fontSize: 180, fontWeight: 800, color: ACCENT, lineHeight: 1 }}>{bigNum}</div>
+            ) : null}
+            <div style={{ fontSize: bigNum ? 54 : 62, fontWeight: 800, color: "#e6edf3", marginLeft: bigNum ? 24 : 0 }}>
+              {headline}
+            </div>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {weakLabel ? (
-            <div style={{ display: "flex", gap: 8, fontSize: 30, color: "#e6edf3" }}>
-              Weakest habit:<span style={{ color: "#fca5a5" }}>{weakLabel}</span>
-            </div>
-          ) : (
-            <div style={{ fontSize: 30, color: "#e6edf3" }}>Most devs over-rate themselves. Here is the measured number.</div>
-          )}
-          <div style={{ fontSize: 24, color: MUTED, marginTop: 14 }}>clawdacademy.app  ·  quality of AI behavior, not volume  ·  local-first · open source</div>
+          <div style={{ fontSize: 30, color: "#e6edf3" }}>{sub}</div>
+          <div style={{ fontSize: 24, color: MUTED, marginTop: 14 }}>
+            clawdacademy.app · quality of AI behavior, not volume · local-first · open source
+          </div>
         </div>
       </div>
     ),
