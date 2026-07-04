@@ -8,11 +8,11 @@ export default async function Home() {
   return (
     <div className="landing">
       <div className="brand">
-        AI Fluency <span className="dot">■</span> Trainer
+        Clawd<span className="dot">■</span>academy
       </div>
       <h1>How well do you use AI — and where to improve.</h1>
       <p>
-        The free dashboard for the AI Fluency Trainer plugin: per-dimension scores from your real
+        The free dashboard for the Clawdacademy plugin: per-dimension scores from your real
         Claude Code sessions, XP and levels, coaching tips, and a recruiter-shareable profile.
       </p>
       <div className="links">

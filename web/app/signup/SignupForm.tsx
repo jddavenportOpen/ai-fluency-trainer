@@ -45,7 +45,7 @@ export default function SignupForm() {
   if (done) {
     const config = JSON.stringify(
       {
-        url: "https://ai-fluency-web-two.vercel.app/api/ingest",
+        url: "https://clawdacademy.app/api/ingest",
         token: done.device_token,
         handle: done.handle,
       },
@@ -56,7 +56,7 @@ export default function SignupForm() {
       <div className="auth-shell">
         <div className="auth-card wide">
           <div className="brand">
-            AI Fluency <span className="dot">■</span> Trainer
+            Clawd<span className="dot">■</span>academy
           </div>
           <h1>You’re in, @{done.handle}</h1>
           <p className="auth-lead">
@@ -101,7 +101,7 @@ export default function SignupForm() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="brand">
-          AI Fluency <span className="dot">■</span> Trainer
+          Clawd<span className="dot">■</span>academy
         </div>
         <h1>Create your account</h1>
         <form onSubmit={onSubmit} className="auth-form">

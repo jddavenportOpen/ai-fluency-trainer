@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Fluency Trainer",
+  metadataBase: new URL("https://clawdacademy.app"),
+  title: "Clawdacademy",
   description: "How well do you use AI — and where to improve.",
 };
 

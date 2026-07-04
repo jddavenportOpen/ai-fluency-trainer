@@ -38,7 +38,7 @@ export default function LoginForm() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="brand">
-          AI Fluency <span className="dot">■</span> Trainer
+          Clawd<span className="dot">■</span>academy
         </div>
         <h1>Log in</h1>
         <form onSubmit={onSubmit} className="auth-form">

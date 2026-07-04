@@ -36,7 +36,7 @@ export default async function Dashboard() {
     <div className="wrap">
       <div className="topbar">
         <div className="brand">
-          AI Fluency <span className="dot">■</span> Trainer
+          Clawd<span className="dot">■</span>academy
         </div>
         <div style={{ fontSize: 13, color: "var(--muted)", display: "flex", gap: 16 }}>
           <Link href={`/u/${HANDLE}`}>Public profile →</Link>

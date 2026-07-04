@@ -19,9 +19,9 @@ type Params = { params: Promise<{ handle: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { handle } = await params;
   const user = await getUserByHandle(handle);
-  if (!user) return { title: "Profile not found — AI Fluency Trainer" };
+  if (!user) return { title: "Profile not found — Clawdacademy" };
   const rating = fluencyRating(await turnScoresFor(user.id));
-  const title = `${user.handle} · ${rating.band} (${rating.score}) — AI Fluency Trainer`;
+  const title = `${user.handle} · ${rating.band} (${rating.score}) — Clawdacademy`;
   const description = `AI-collaboration fluency profile for @${user.handle}: quality rating, dimension radar, and usage stats.`;
   return {
     title,
@@ -48,7 +48,7 @@ export default async function SharePage({ params }: Params) {
     <div className="wrap">
       <div className="topbar">
         <div className="brand">
-          AI Fluency <span className="dot">■</span> Trainer
+          Clawd<span className="dot">■</span>academy
         </div>
         <span className="verified">✓ behavior profile · beta</span>
       </div>
@@ -108,7 +108,7 @@ export default async function SharePage({ params }: Params) {
       <div className="footer-note">
         Behavior profile computed from Claude Code session telemetry, scored on-device and
         synced by the user. Server-verified scoring is coming; treat this as a
-        self-instrumented profile, not an audited credential. · AI Fluency Trainer
+        self-instrumented profile, not an audited credential. · Clawdacademy
       </div>
     </div>
   );
