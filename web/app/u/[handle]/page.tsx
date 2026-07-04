@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Radar from "@/components/Radar";
+import ShareRow from "@/components/ShareRow";
 import { getUserByHandle, turnScoresFor, sessionCountFor } from "@/lib/db";
 import {
   dimAverages,
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description,
     openGraph: { title, description, type: "profile" },
-    twitter: { card: "summary", title, description },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -43,6 +44,8 @@ export default async function SharePage({ params }: Params) {
   const avgs = dimAverages(scores);
   const strongest = strongestDims(scores, 3);
   const sessions = await sessionCountFor(user.id);
+  const weakestEntry = Object.entries(avgs).sort((a, b) => a[1] - b[1])[0];
+  const weakest = weakestEntry ? prettifyDim(weakestEntry[0]) : null;
 
   return (
     <div className="wrap">
@@ -50,7 +53,10 @@ export default async function SharePage({ params }: Params) {
         <div className="brand">
           Clawd<span className="dot">■</span>academy
         </div>
-        <span className="verified">✓ behavior profile · beta</span>
+        <span className="verified" style={{ display: "inline-flex", gap: 14, alignItems: "center" }}>
+          <a href="/leaderboard" style={{ color: "inherit", textDecoration: "none" }}>Leaderboard</a>
+          <span>✓ behavior profile · beta</span>
+        </span>
       </div>
 
       <div className="share-hero">
@@ -69,6 +75,14 @@ export default async function SharePage({ params }: Params) {
             : ` · ${rating.sampled}/${15} turns to establish`}
         </div>
       </div>
+
+      <ShareRow
+        handle={user.handle}
+        band={rating.band}
+        score={rating.score}
+        weakestDim={weakest}
+        established={rating.established}
+      />
 
       <div className="stat-row">
         <div className="stat">

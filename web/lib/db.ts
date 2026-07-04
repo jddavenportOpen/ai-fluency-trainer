@@ -567,6 +567,19 @@ export async function sessionCountFor(userId: number): Promise<number> {
   return row.n;
 }
 
+/** All users (id + handle) for the public leaderboard ranking (PRD-02 §4.4).
+ * The rating is computed per-user by the caller from turnScoresFor; fine at
+ * early scale, revisit with a materialized view when the user base grows. */
+export async function listUsers(): Promise<{ id: number; handle: string }[]> {
+  if (useSupabase()) {
+    return sbPageAll<{ id: number; handle: string }>(
+      (from, to) => getSb().from("aif_users").select("id, handle").range(from, to),
+      "listUsers"
+    );
+  }
+  return getSqlite().prepare("SELECT id, handle FROM users").all() as { id: number; handle: string }[];
+}
+
 /* ---- seed helpers (used by scripts/seed.ts; idempotent reseeding) ---- */
 
 /** Delete all events + turn_scores for a user (NOT the user row). */
