@@ -17,6 +17,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
+# 0) Bundle the scorer into the plugin so the install is self-contained
+#    (scoring no longer depends on a repo checkout being present).
+bash "$REPO/plugin/bundle.sh"
+
 # 1) Plugin: register this repo as a marketplace, install the plugin (both idempotent)
 claude plugin marketplace add "$REPO" 2>/dev/null || claude plugin marketplace update ai-fluency
 claude plugin install ai-fluency@ai-fluency 2>/dev/null || echo "(plugin already installed)"

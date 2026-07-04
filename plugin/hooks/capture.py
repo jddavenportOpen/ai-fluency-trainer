@@ -106,9 +106,11 @@ def emit(sid, event, data):
 
 
 def _find_scorer():
-    """Marketplace installs copy plugin files away from the repo, so the
-    repo-relative path can break. Resolution order: explicit env var, sync
-    config, repo-relative (checkout / --plugin-dir), well-known checkout."""
+    """Resolve the scorer entrypoint. Order: explicit env var, sync config,
+    plugin-bundled copy (self-contained marketplace install — see plugin/bundle.sh
+    which stages scorer/ next to hooks/), repo-relative checkout, well-known path."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or os.path.dirname(here)
     candidates = [os.environ.get("AI_FLUENCY_SCORER", "")]
     cfg = os.path.join(FLUENCY_DIR, "config.json")
     try:
@@ -116,7 +118,8 @@ def _find_scorer():
             candidates.append(json.load(f).get("scorer", ""))
     except Exception:
         pass
-    here = os.path.dirname(os.path.abspath(__file__))
+    candidates.append(os.path.join(plugin_root, "scorer", "score_turn.py"))  # bundled
+    candidates.append(os.path.normpath(os.path.join(here, "..", "scorer", "score_turn.py")))
     candidates.append(os.path.normpath(os.path.join(here, "..", "..", "scorer", "score_turn.py")))
     candidates.append(os.path.expanduser("~/code/ai-fluency-trainer/scorer/score_turn.py"))
     for c in candidates:

@@ -10,6 +10,9 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+// Single canonical source for scoring weights (see stats.ts). Type-only cycle
+// with stats.ts (it imports TurnScoreRow type from here) — erased at compile.
+import { DIM_WEIGHTS, DEFAULT_WEIGHT } from "./stats.ts";
 import { createRequire } from "node:module";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
@@ -162,22 +165,8 @@ interface ValidScore {
   highlight: string | null;
 }
 
-/* Server-side scoring weights. The credential's integrity depends on the
- * server never trusting client-asserted XP: dims are clamped and XP is
- * RECOMPUTED here from the server's own weight table (this is also the seam
- * where sealed/rotating weights live — the client repo may be open-sourced,
- * this file is not). Kept in sync with the client deliberately, not
- * automatically. */
-const DIM_WEIGHTS: Record<string, number> = {
-  verification: 1.6,
-  diagnose_vs_retry: 1.4,
-  context_setting: 1.0,
-  plan_first: 1.0,
-  iteration_discipline: 1.0,
-  understanding_seeking: 0.8,
-  scope_discipline: 0.8,
-};
-const DEFAULT_WEIGHT = 1.0;
+/* Server never trusts client-asserted XP: dims are clamped and XP is
+ * RECOMPUTED from the canonical DIM_WEIGHTS (imported from stats.ts above). */
 const MAX_TIP_CHARS = 300;
 const MAX_DATA_JSON_CHARS = 4096;
 // Never store these even if a non-official client sends them.

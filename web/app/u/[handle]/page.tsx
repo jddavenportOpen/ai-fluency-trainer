@@ -4,6 +4,7 @@ import Radar from "@/components/Radar";
 import { getUserByHandle, turnScoresFor, sessionCountFor } from "@/lib/db";
 import {
   dimAverages,
+  fluencyRating,
   fmtDateLong,
   levelProgress,
   prettifyDim,
@@ -19,9 +20,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { handle } = await params;
   const user = await getUserByHandle(handle);
   if (!user) return { title: "Profile not found — AI Fluency Trainer" };
-  const lvl = levelProgress(totalXP(await turnScoresFor(user.id)));
-  const title = `${user.handle} · Level ${lvl.level} ${lvl.title} — AI Fluency Trainer`;
-  const description = `Verified AI-collaboration fluency profile for @${user.handle}: level, dimension radar, and usage stats.`;
+  const rating = fluencyRating(await turnScoresFor(user.id));
+  const title = `${user.handle} · ${rating.band} (${rating.score}) — AI Fluency Trainer`;
+  const description = `AI-collaboration fluency profile for @${user.handle}: quality rating, dimension radar, and usage stats.`;
   return {
     title,
     description,
@@ -38,6 +39,7 @@ export default async function SharePage({ params }: Params) {
   const scores = await turnScoresFor(user.id);
   const xp = totalXP(scores);
   const lvl = levelProgress(xp);
+  const rating = fluencyRating(scores);
   const avgs = dimAverages(scores);
   const strongest = strongestDims(scores, 3);
   const sessions = await sessionCountFor(user.id);
@@ -53,16 +55,26 @@ export default async function SharePage({ params }: Params) {
 
       <div className="share-hero">
         <div className="level-badge">
-          <span className="lv">LEVEL</span>
-          <span className="num">{lvl.level}</span>
+          <span className="lv">FLUENCY</span>
+          <span className="num">{rating.score}</span>
         </div>
-        <h1>{lvl.title}</h1>
+        <h1>
+          {rating.band}
+          {!rating.established && <span className="provisional"> · provisional</span>}
+        </h1>
         <div className="handle">
-          <b>@{user.handle}</b> · {xp.toLocaleString()} XP earned collaborating with AI
+          <b>@{user.handle}</b> · quality of AI-collaboration behavior, not volume
+          {rating.established
+            ? ` · last ${rating.sampled} turns`
+            : ` · ${rating.sampled}/${15} turns to establish`}
         </div>
       </div>
 
       <div className="stat-row">
+        <div className="stat">
+          <div className="v">Lv {lvl.level}</div>
+          <div className="k">{lvl.title} · activity</div>
+        </div>
         <div className="stat">
           <div className="v">{sessions}</div>
           <div className="k">Sessions</div>
@@ -70,10 +82,6 @@ export default async function SharePage({ params }: Params) {
         <div className="stat">
           <div className="v">{scores.length}</div>
           <div className="k">Turns scored</div>
-        </div>
-        <div className="stat">
-          <div className="v">{xp.toLocaleString()}</div>
-          <div className="k">Total XP</div>
         </div>
         <div className="stat">
           <div className="v">{fmtDateLong(user.created_at)}</div>

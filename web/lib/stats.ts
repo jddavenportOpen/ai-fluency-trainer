@@ -15,6 +15,67 @@ export function levelTitle(level: number): string {
   return level >= 7 ? MAX_TITLE : LEVEL_TITLES[level] ?? MAX_TITLE;
 }
 
+/* The ONE canonical scoring weight table (mirrors scorer/rubric.py). db.ts
+ * imports these — do not redeclare weights anywhere else. */
+export const DIM_WEIGHTS: Record<string, number> = {
+  verification: 1.6,
+  diagnose_vs_retry: 1.4,
+  context_setting: 1.0,
+  plan_first: 1.0,
+  iteration_discipline: 1.0,
+  understanding_seeking: 0.8,
+  scope_discipline: 0.8,
+};
+export const DEFAULT_WEIGHT = 1.0;
+
+/** Weighted quality of a single turn's dims (0-100). Volume-independent. */
+export function turnQuality(dims: Record<string, number>): number | null {
+  const keys = Object.keys(dims);
+  if (keys.length === 0) return null;
+  let sum = 0;
+  let wsum = 0;
+  for (const k of keys) {
+    const w = DIM_WEIGHTS[k] ?? DEFAULT_WEIGHT;
+    sum += dims[k] * w;
+    wsum += w;
+  }
+  return wsum ? sum / wsum : null;
+}
+
+/* The recruiter-facing headline: a QUALITY rating that does not grow with turn
+ * count. It is the mean weighted-quality of the most recent N scored turns, so
+ * grinding more turns can't inflate it — only scoring better can. Provisional
+ * until enough turns exist to be meaningful. */
+export const RATING_WINDOW = 50;
+export const RATING_MIN_TURNS = 15;
+const RATING_BANDS: { min: number; band: string }[] = [
+  { min: 85, band: "Expert" },
+  { min: 72, band: "Advanced" },
+  { min: 58, band: "Proficient" },
+  { min: 42, band: "Developing" },
+  { min: 0, band: "Emerging" },
+];
+
+export function fluencyRating(scores: TurnScoreRow[]): {
+  score: number; // 0-100 quality
+  band: string;
+  established: boolean; // false => "provisional", too few turns
+  sampled: number; // turns that fed the rating
+} {
+  const recent = scores.slice(-RATING_WINDOW);
+  const qualities: number[] = [];
+  for (const s of recent) {
+    const q = turnQuality(parseDims(s));
+    if (q !== null) qualities.push(q);
+  }
+  if (qualities.length === 0) {
+    return { score: 0, band: "Emerging", established: false, sampled: 0 };
+  }
+  const score = Math.round(qualities.reduce((a, b) => a + b, 0) / qualities.length);
+  const band = RATING_BANDS.find((b) => score >= b.min)!.band;
+  return { score, band, established: qualities.length >= RATING_MIN_TURNS, sampled: qualities.length };
+}
+
 /** Level = largest N with totalXP >= 100*N*N (level 0 start). */
 export function levelForXP(totalXP: number): number {
   if (totalXP <= 0) return 0;

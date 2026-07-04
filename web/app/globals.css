@@ -180,6 +180,7 @@ a:hover { text-decoration: underline; }
 }
 .skill-badge .v { color: var(--accent); font-weight: 800; }
 
+.provisional { color: var(--muted); font-size: 0.6em; font-weight: 400; letter-spacing: 0.04em; }
 .verified {
   display: inline-flex;
   align-items: center;
