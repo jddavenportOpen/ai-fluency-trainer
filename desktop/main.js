@@ -9,10 +9,11 @@
  *                      capture /tmp/aif-desktop.png + /tmp/aif-desktop-stats.png, exit 0
  */
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const core = require('../coach-core'); // shared engine (Fluency Rating for the tray)
 
 const REPLAY = process.env.AIF_REPLAY ? path.resolve(process.env.AIF_REPLAY) : null;
 const SCREENSHOT = process.env.AIF_SCREENSHOT === '1';
@@ -86,6 +87,8 @@ function statsPayload() {
 
 /* ---------- window ---------- */
 let win = null;
+let tray = null;
+let isQuitting = false;
 function send(msg) {
   if (win && !win.isDestroyed()) win.webContents.send('aif', msg);
 }
@@ -108,6 +111,14 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // Mode A background: closing the window hides it to the tray and the harness
+  // keeps running. Real quit is only via the tray menu (isQuitting).
+  win.on('close', (e) => {
+    if (!isQuitting && !SCREENSHOT && !REPLAY && tray) {
+      e.preventDefault();
+      win.hide();
+    }
+  });
 }
 
 /* ---------- live mode: watch + poll tail ---------- */
@@ -231,6 +242,53 @@ async function doScreenshots() {
   }
 }
 
+/* ---------- tray + background (mode A) ---------- */
+function showWindow() {
+  if (!win || win.isDestroyed()) createWindow();
+  else { win.show(); win.focus(); }
+}
+function ratingLabel() {
+  try {
+    const p = core.profile(core.readEvents(liveEventsFile()));
+    if (!p.turns) return 'No scored turns yet';
+    return `Fluency ${p.rating} ${p.band}${p.established ? '' : ' (prov)'} · Lv ${p.level}`;
+  } catch {
+    return 'Clawdacademy';
+  }
+}
+function buildTrayMenu() {
+  const openAtLogin = app.getLoginItemSettings().openAtLogin;
+  return Menu.buildFromTemplate([
+    { label: ratingLabel(), enabled: false },
+    { type: 'separator' },
+    { label: 'Open Clawdacademy', click: showWindow },
+    {
+      label: 'Start at login',
+      type: 'checkbox',
+      checked: openAtLogin,
+      click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked }),
+    },
+    { type: 'separator' },
+    { label: 'Quit Clawdacademy', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+}
+function setupTray() {
+  let img;
+  try {
+    img = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 18, height: 18 });
+  } catch {
+    img = undefined;
+  }
+  tray = new Tray(img || path.join(__dirname, 'build', 'icon.png'));
+  tray.setToolTip('Clawdacademy — coaching in the background');
+  tray.setContextMenu(buildTrayMenu());
+  tray.on('click', showWindow);
+  const iv = setInterval(() => {
+    if (tray && !tray.isDestroyed()) tray.setContextMenu(buildTrayMenu());
+  }, 15000);
+  if (iv.unref) iv.unref();
+}
+
 /* ---------- wiring ---------- */
 ipcMain.handle('stats', () => statsPayload());
 
@@ -249,8 +307,17 @@ ipcMain.on('renderer-ready', () => {
   if (SCREENSHOT) doScreenshots();
 });
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => app.quit());
+app.whenReady().then(() => {
+  createWindow();
+  if (!SCREENSHOT && !REPLAY) setupTray(); // mode A: keep coaching in the background
+});
+app.on('before-quit', () => { isQuitting = true; });
+app.on('window-all-closed', () => {
+  // Mode A: keep running in the tray. Only quit outright in screenshot/replay
+  // modes, or if the tray never came up.
+  if (SCREENSHOT || REPLAY || !tray) app.quit();
+});
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  else showWindow();
 });

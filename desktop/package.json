@@ -1,15 +1,17 @@
 {
-  "name": "fluency-coach",
+  "name": "clawdacademy-desktop",
   "productName": "Clawdacademy",
   "version": "0.1.0",
-  "description": "Live coaching sidebar for Claude Code — XP, levels, per-turn feedback (desktop)",
+  "description": "Clawdacademy — real-time AI-fluency coaching for Claude Code (desktop)",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "screenshot": "AIF_SCREENSHOT=1 electron .",
     "replay": "AIF_REPLAY=\"${AIF_REPLAY:-../fixtures/out/good-user.events.jsonl}\" electron .",
-    "dist": "electron-builder --mac --arm64 --dir --publish never"
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist": "electron-builder --mac --win --publish never"
   },
   "devDependencies": {
     "electron": "^37.2.0",
@@ -18,25 +20,38 @@
   "build": {
     "appId": "com.clawdacademy.coach",
     "productName": "Clawdacademy",
+    "asar": false,
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**"
+      "renderer/**",
+      "bootstrap/**"
     ],
+    "extraResources": [
+      { "from": "../coach-core", "to": "coach-core" }
+    ],
+    "icon": "build/icon.png",
     "mac": {
       "target": [
-        {
-          "target": "dir",
-          "arch": [
-            "arm64"
-          ]
-        }
+        { "target": "dmg", "arch": ["arm64"] }
       ],
       "identity": null,
       "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Clawdacademy-Setup-${version}.${ext}"
     }
   }
 }
