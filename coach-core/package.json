@@ -1,0 +1,8 @@
+{
+  "name": "@clawdacademy/coach-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UI-free coaching engine (events.jsonl -> XP/level + Fluency Rating). Shared by the coach TUI, statusline, and the Clawdacademy desktop app.",
+  "main": "index.js",
+  "license": "UNLICENSED"
+}

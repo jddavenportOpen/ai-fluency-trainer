@@ -3,6 +3,10 @@
 /*
  * fluency — real-time terminal coaching sidebar for Claude Code.
  *
+ * Now a thin TUI adapter over @clawdacademy/coach-core (PRD-07 M1): every bit of
+ * gamification/rating math + events IO lives in the shared engine; this file owns
+ * ONLY terminal rendering. The standalone app + statusline read the same core.
+ *
  * Modes:
  *   fluency.js                 live tail of the events file (default)
  *   fluency.js --replay <f>    replay an events.jsonl at ~5 ev/sec, then exit
@@ -12,8 +16,8 @@
  */
 
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const core = require('../coach-core');
+const { titleFor, levelFor, xpForLevel, prettify, eventsFile, parseLine, readEvents, aggregate } = core;
 
 /* ---------- ANSI ---------- */
 const TTY = process.stdout.isTTY;
@@ -25,47 +29,7 @@ const green = c('32');
 const yellow = c('33');
 const magenta = c('35');
 const cyan = c('36');
-
-/* ---------- gamification math (shared contract) ---------- */
-const TITLES = ['Novice', 'Apprentice', 'Operator', 'Collaborator', 'Director', 'Architect', 'Conductor'];
-const titleFor = (lv) => (lv >= 7 ? 'Virtuoso' : TITLES[lv]);
-// Level = largest N with totalXP >= 100*N*N
-const levelFor = (xp) => Math.floor(Math.sqrt(Math.max(0, xp) / 100));
-const xpForLevel = (lv) => 100 * lv * lv;
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const prettify = (k) =>
-  String(k)
-    .split('_')
-    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
-    .join(' ');
-
-/* ---------- events file ---------- */
-function eventsFile() {
-  const dir = process.env.AI_FLUENCY_DIR || path.join(os.homedir(), '.ai-fluency');
-  return path.join(dir, 'events.jsonl');
-}
-
-function parseLine(line) {
-  const t = line.trim();
-  if (!t) return null;
-  try {
-    const ev = JSON.parse(t);
-    if (!ev || typeof ev !== 'object' || typeof ev.event !== 'string') return null;
-    return ev;
-  } catch {
-    return null; // skip malformed lines silently
-  }
-}
-
-function readEvents(file) {
-  let raw;
-  try {
-    raw = fs.readFileSync(file, 'utf8');
-  } catch {
-    return [];
-  }
-  return raw.split('\n').map(parseLine).filter(Boolean);
-}
 
 /* ---------- rendering ---------- */
 const BAR_W = 20;
@@ -157,27 +121,6 @@ function renderEvent(ev, state) {
     default:
       return '';
   }
-}
-
-/* ---------- aggregation (shared by --summary and live seeding) ---------- */
-function aggregate(events) {
-  const agg = { xp: 0, sessions: 0, turns: 0, dimSum: {}, dimCount: {} };
-  for (const ev of events) {
-    if (ev.event === 'session_start') agg.sessions++;
-    if (ev.event === 'turn_score') {
-      const d = ev.data || {};
-      agg.xp += Number(d.xp) || 0;
-      agg.turns++;
-      const dims = d.dims && typeof d.dims === 'object' ? d.dims : {};
-      for (const [k, v] of Object.entries(dims)) {
-        const val = Number(v);
-        if (!Number.isFinite(val)) continue;
-        agg.dimSum[k] = (agg.dimSum[k] || 0) + val;
-        agg.dimCount[k] = (agg.dimCount[k] || 0) + 1;
-      }
-    }
-  }
-  return agg;
 }
 
 /* ---------- modes ---------- */
@@ -300,7 +243,7 @@ Usage:
   fluency.js --summary       print aggregate level/XP/dimension report
 
 Env:
-  AI_FLUENCY_DIR   override the events directory (default ~/.ai-fluency)`);
+  CLAWDACADEMY_DIR   override the events directory (default ~/.ai-fluency)`);
     return;
   }
   const ri = args.indexOf('--replay');
