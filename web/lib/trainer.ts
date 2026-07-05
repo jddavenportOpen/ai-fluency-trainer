@@ -74,3 +74,25 @@ export function focusDim(
   if (!worst) return null;
   return { dim: worst.dim, label: prettifyDim(worst.dim), avg: worst.avg, lesson: BY_DIM[worst.dim] };
 }
+
+/** Retro/trend on the focus dim: did it move? recent turns vs the prior window.
+ * The "measurably better" proof, surfaced on the profile so users SEE the change. */
+export function retroTrend(
+  scores: TurnScoreRow[],
+  dim: string
+): { recent: number; prior: number; delta: number; moved: boolean; n: number } | null {
+  const vals: number[] = [];
+  for (const s of scores) {
+    const d = parseDims(s)[dim];
+    if (typeof d === "number" && Number.isFinite(d)) vals.push(d);
+  }
+  if (vals.length < 6) return null;
+  const recentN = Math.min(10, Math.floor(vals.length / 2));
+  const recent = vals.slice(-recentN);
+  const prior = vals.slice(0, -recentN);
+  if (!prior.length) return null;
+  const avg = (a: number[]) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
+  const r = avg(recent);
+  const p = avg(prior);
+  return { recent: r, prior: p, delta: r - p, moved: r > p, n: vals.length };
+}

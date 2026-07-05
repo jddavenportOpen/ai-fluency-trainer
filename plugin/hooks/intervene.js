@@ -100,7 +100,7 @@ function main() {
   }
 
   // The 3 forcing-function rules.
-  const decisions = trainer.evaluate(events, { hook, tool });
+  const decisions = trainer.evaluate(events, { hook, tool, toolInput: p.tool_input });
   const rlP = path.join(STATE, `trainer-rl-${(String(sid).replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown")}.json`);
   const st = readJson(rlP) || { fired: {}, dismissed: {} };
   const globalDismiss = (readJson(path.join(DIR, "config.json")) || {}).coach_off;

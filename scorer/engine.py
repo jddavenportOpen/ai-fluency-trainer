@@ -291,6 +291,46 @@ def _first_word(prompt):
     return words[1] if words[0] in ("please", "just", "now", "can", "hey") and len(words) > 1 else words[0]
 
 
+# A "calibrated oracle" turn: a short, deterministic, self-contained instruction a
+# competent user issues ON PURPOSE (rename X to Y, bump a version, set a flag) — the
+# L4 "calibrated delegation" case in the curriculum. You do NOT brief or plan a
+# mechanical one-liner, so context_setting and plan_first DON'T APPLY (they become
+# NA, not a penalty). Guarded tightly: it must (1) open with a mechanical verb,
+# (2) name a concrete target (a file path, a code literal, a version, or a
+# camel/snake/dotted symbol), (3) actually make a SMALL single-file edit, and
+# (4) not be a multi-scope ask or a question. So "fix the bug" / "make it faster" /
+# "add auth to the app" never qualify — they have no concrete target.
+MECHANICAL_VERBS = {
+    "rename", "bump", "set", "change", "replace", "increment", "decrement",
+    "format", "sort", "alphabetize", "capitalize", "lowercase", "uppercase",
+    "comment", "uncomment", "prefix", "suffix", "append", "prepend", "inline",
+    "rename", "swap", "reorder", "indent", "unindent", "wrap", "unwrap",
+}
+_LITERAL_RE = re.compile(r"`[^`]+`|\"[^\"]+\"|'[^']+'|\bv?\d+\.\d+")
+_SYMBOL_RE = re.compile(r"\b[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*\b|\b[a-z]+_[a-z0-9_]+\b|\b\w+\.\w{1,4}\b")
+
+
+def is_calibrated_oracle(turn):
+    """True for a short, deterministic, single-target mechanical edit (L4). For
+    these, briefing/planning are not-applicable, not weak — see score_session."""
+    p = (turn.get("prompt") or "").strip()
+    words = p.split()
+    if not (0 < len(words) <= 14):
+        return False
+    if ALSO_RE.search(p) or "?" in p:
+        return False
+    if _first_word(p) not in MECHANICAL_VERBS:
+        return False
+    has_target = bool(PATH_RE.search(p) or _LITERAL_RE.search(p) or _SYMBOL_RE.search(p))
+    if not has_target:
+        return False
+    mut = [t for t in turn["tools"] if t["name"] in MUTATING_TOOLS]
+    if not mut or len(mut) > 2:
+        return False
+    mut_files = {str((t["input"] or {}).get("file_path", "")) for t in mut}
+    return len(mut_files) == 1
+
+
 def score_context_setting(turn, ctx):
     p = turn["prompt"]
     words = len(p.split())
@@ -552,6 +592,13 @@ def score_session(turns, only_complete=True, judge=None):
             "scope_discipline": score_scope_discipline(turn, ctx),
             "iteration_discipline": score_iteration_discipline(turn, ctx, state),
         }
+        # Fit-to-task (L4): for a calibrated mechanical one-liner, briefing and
+        # planning DON'T APPLY — mark them NA so a senior isn't scolded for correct
+        # oracle-style delegation. Computed AFTER plan_first so session state (mutated
+        # / explored) still rolls forward normally; only the emitted dim is nulled.
+        if is_calibrated_oracle(turn):
+            dims["context_setting"] = NA
+            dims["plan_first"] = NA
         judged = False
         if judge is not None:
             turn["prev_prompt"] = state["prev_prompt"]   # judge sees the prior prompt

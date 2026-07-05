@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import Radar from "@/components/Radar";
 import ShareRow from "@/components/ShareRow";
-import { focusDim } from "@/lib/trainer";
-import { getUserByHandle, turnScoresFor, sessionCountFor } from "@/lib/db";
+import { focusDim, retroTrend } from "@/lib/trainer";
+import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
 import {
   dimAverages,
   fluencyRating,
@@ -13,6 +15,28 @@ import {
   strongestDims,
   totalXP,
 } from "@/lib/stats";
+
+/** Percentile of this established rating among other established peers.
+ * Honest signal for a recruiter (Priya): where does this sit in the population,
+ * not just an absolute number. Null until there's a real peer set. */
+async function ratingPercentile(
+  selfId: number,
+  selfScore: number
+): Promise<{ pct: number; n: number } | null> {
+  const users = await listUsers();
+  if (users.length > 250) return null; // guard: skip the N+1 at real scale (materialize later)
+  const peers: number[] = [];
+  await Promise.all(
+    users.map(async (u) => {
+      if (u.id === selfId) return;
+      const r = fluencyRating(await turnScoresFor(u.id));
+      if (r.established) peers.push(r.score);
+    })
+  );
+  if (peers.length < 3) return null;
+  const below = peers.filter((s) => s < selfScore).length;
+  return { pct: Math.round((below / peers.length) * 100), n: peers.length + 1 };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +72,12 @@ export default async function SharePage({ params }: Params) {
   const weakestEntry = Object.entries(avgs).sort((a, b) => a[1] - b[1])[0];
   const weakest = weakestEntry ? prettifyDim(weakestEntry[0]) : null;
   const coaching = focusDim(scores);
+  const trend = coaching ? retroTrend(scores, coaching.dim) : null;
+  const percentile = rating.established ? await ratingPercentile(user.id, rating.score) : null;
+  const viewer = await getCurrentUser();
+  const isOwner = viewer?.id === user.id;
+  // A near-empty profile: guide the light user in instead of showing a bare radar.
+  const onboarding = scores.length < 6;
 
   return (
     <div className="wrap">
@@ -76,6 +106,21 @@ export default async function SharePage({ params }: Params) {
             ? ` · last ${rating.sampled} turns`
             : ` · ${rating.sampled}/${15} turns to establish`}
         </div>
+        {rating.established && (
+          <div
+            className="attest"
+            style={{ marginTop: 8, fontSize: 13, color: "#9fb0c3", display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}
+          >
+            {percentile && (
+              <span style={{ color: "#67e8f9" }}>
+                ~{percentile.pct}th percentile of {percentile.n} scored profiles
+              </span>
+            )}
+            <span>
+              sampled from {rating.sampled} real turns across {sessions} session{sessions === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
       </div>
 
       <ShareRow
@@ -115,6 +160,26 @@ export default async function SharePage({ params }: Params) {
         </div>
       )}
 
+      {onboarding && (
+        <div
+          className="card"
+          style={{ maxWidth: 560, margin: "0 auto 18px", borderLeft: "3px solid #5eead4" }}
+        >
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#5eead4", textTransform: "uppercase" }}>
+            Getting your first read
+          </div>
+          <p style={{ color: "#c9d3df", lineHeight: 1.6, marginBottom: 8 }}>
+            Your profile fills in as you work — no coding sprint required. Every real Claude Code
+            turn is scored on-device. You don&apos;t need to do anything special:
+          </p>
+          <ol style={{ color: "#c9d3df", lineHeight: 1.7, paddingLeft: 18, margin: 0 }}>
+            <li>Use Claude Code on anything real — a script, a fix, a question about your own repo.</li>
+            <li>Ask for a plan before edits, and run something to check the result. That&apos;s the whole game.</li>
+            <li>Come back after ~15 turns for an established Rating; the radar and coaching sharpen with every session.</li>
+          </ol>
+        </div>
+      )}
+
       <div className="card" style={{ maxWidth: 560, margin: "0 auto" }}>
         <h2>Fluency Radar</h2>
         <p className="sub">Average score per dimension across all scored sessions (0–100).</p>
@@ -135,6 +200,28 @@ export default async function SharePage({ params }: Params) {
             <span style={{ color: "#67e8f9", fontWeight: 700 }}>Drill · </span>
             <span style={{ color: "#e6edf3" }}>{coaching.lesson.drill}</span>
           </div>
+          {trend && (
+            <p style={{ marginTop: 12, marginBottom: 0, fontSize: 13.5, color: trend.moved ? "#5eead4" : "#9fb0c3" }}>
+              {trend.moved ? "↑ Moving: " : "→ Holding: "}
+              <b>{coaching.label}</b> is {trend.recent} across your last turns vs {trend.prior} before
+              {trend.moved ? ` — +${trend.delta}. Keep the rep.` : ". This is the one to push on."}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Get-your-own CTA — turns a viewed profile into a new user (the loop's close). */}
+      {!isOwner && (
+        <div
+          className="card"
+          style={{ maxWidth: 560, margin: "18px auto 0", textAlign: "center", border: "1px solid #1e3a4a", background: "#0c1520" }}
+        >
+          <div style={{ fontSize: 15, color: "#e6edf3", marginBottom: 12 }}>
+            This is a real behavior profile from real Claude Code sessions. <b>Get yours in minutes.</b>
+          </div>
+          <Link className="btn primary" href="/signup">
+            Get your Rating →
+          </Link>
         </div>
       )}
 

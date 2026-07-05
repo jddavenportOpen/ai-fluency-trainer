@@ -138,6 +138,24 @@ const READ_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "NotebookRead"]);
 const MUTATE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const VERIFY_RE = /\b(test|pytest|jest|vitest|npm (run )?(test|build)|yarn (test|build)|make|cargo (test|build|check)|go test|curl|node .*\.test|build)\b/i;
 
+// Fit-to-task (L4): a tiny surgical first edit is a calibrated one-liner (rename,
+// bump, flip a flag) — you don't plan those, so the plan-gate must NOT block it.
+// A large Edit or any Write (new/replaced file) is real work and still gates.
+function isTrivialEdit(tool, ti) {
+  if (!ti || typeof ti !== "object") return false;
+  const short = (s) => String(s || "").length <= 160;
+  if (tool === "Edit") {
+    const o = String(ti.old_string || "");
+    return short(o) && short(ti.new_string) && o.split("\n").length <= 3;
+  }
+  if (tool === "MultiEdit") {
+    const edits = Array.isArray(ti.edits) ? ti.edits : [];
+    return edits.length > 0 && edits.length <= 2 &&
+      edits.every((e) => short(e && e.old_string) && short(e && e.new_string));
+  }
+  return false; // Write / NotebookEdit are never "trivial" for gating
+}
+
 function isVerifyBash(ev) {
   if (ev.event !== "tool_use") return false;
   const d = ev.data || {};
@@ -172,7 +190,7 @@ function evaluate(sessionEvents, ctx = {}) {
       if (READ_TOOLS.has(t)) priorReads++;
       if (MUTATE_TOOLS.has(t)) priorMutations++;
     }
-    if (priorReads === 0 && priorMutations === 0) {
+    if (priorReads === 0 && priorMutations === 0 && !isTrivialEdit(tool, ctx.toolInput)) {
       out.push({
         rule: "plan_gate", lesson_id: "L5", dim: "plan_first",
         decision: { type: "block_tool", reason: "One line first: what's the plan? Explore or outline before the first edit - unplanned edits are the top predictor of rework." },
