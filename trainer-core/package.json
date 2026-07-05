@@ -1,0 +1,8 @@
+{
+  "name": "@clawdacademy/trainer-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The teaching engine: curriculum manifest + focus-dim + the forcing-function intervention brain. Shared by the plugin hooks (in-flow) and the app (reflective).",
+  "main": "index.js",
+  "license": "UNLICENSED"
+}
