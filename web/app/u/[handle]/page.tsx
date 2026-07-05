@@ -19,6 +19,13 @@ import {
 /** Percentile of this established rating among other established peers.
  * Honest signal for a recruiter (Priya): where does this sit in the population,
  * not just an absolute number. Null until there's a real peer set. */
+/** Correct English ordinal: 1st, 2nd, 3rd, 33rd, 11th, 12th, 13th. */
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 async function ratingPercentile(
   selfId: number,
   selfScore: number
@@ -113,7 +120,7 @@ export default async function SharePage({ params }: Params) {
           >
             {percentile && (
               <span style={{ color: "#67e8f9" }}>
-                ~{percentile.pct}th percentile of {percentile.n} scored profiles
+                {ordinal(percentile.pct)} percentile of {percentile.n} scored profiles
               </span>
             )}
             <span>
