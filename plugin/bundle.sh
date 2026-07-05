@@ -14,3 +14,15 @@ for f in score_turn.py engine.py rubric.py judge.py; do
   cp "$SRC/$f" "$DST/$f"
 done
 echo "bundled scorer -> $DST ($(ls "$DST" | wc -l | tr -d ' ') files)"
+
+# Stage the shared engines so the Node intervention hook's require('../coach-core'
+# | '../trainer-core') resolves on a marketplace install (the bundled path).
+# coach-core MEASURES, trainer-core TEACHES; both are gitignored/generated here,
+# source of truth is /coach-core and /trainer-core.
+for eng in coach-core trainer-core; do
+  ED="$HERE/$eng"
+  rm -rf "$ED"; mkdir -p "$ED"
+  cp "$HERE/../$eng/index.js" "$ED/index.js"
+  [ -f "$HERE/../$eng/package.json" ] && cp "$HERE/../$eng/package.json" "$ED/package.json"
+  echo "bundled $eng -> $ED"
+done
