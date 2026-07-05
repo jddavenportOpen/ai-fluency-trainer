@@ -30,20 +30,25 @@ function ordinal(n: number): string {
 async function ratingPercentile(
   selfId: number,
   selfScore: number
-): Promise<{ pct: number; n: number } | null> {
+): Promise<{ pct: number; n: number; seeded: number } | null> {
   const users = await listUsers();
   if (users.length > 250) return null; // guard: skip the N+1 at real scale (materialize later)
   const peers: number[] = [];
+  let seeded = 0;
   await Promise.all(
     users.map(async (u) => {
       if (u.id === selfId) return;
       const r = fluencyRating(await turnScoresFor(u.id));
-      if (r.established) peers.push(r.score);
+      if (r.established) {
+        peers.push(r.score);
+        if (u.handle.startsWith("demo-")) seeded++;
+      }
     })
   );
   if (peers.length < 3) return null;
   const below = peers.filter((s) => s < selfScore).length;
-  return { pct: Math.round((below / peers.length) * 100), n: peers.length + 1 };
+  // seeded includes only PEERS; +1 for self keeps the same total the user sees.
+  return { pct: Math.round((below / peers.length) * 100), n: peers.length + 1, seeded };
 }
 
 export const dynamic = "force-dynamic";
@@ -111,10 +116,31 @@ export default async function SharePage({ params }: Params) {
         </h1>
         <div className="handle">
           <b>@{user.handle}</b> · quality of AI-collaboration behavior, not volume
-          {rating.established
-            ? ` · last ${rating.sampled} turns`
-            : ` · ${rating.sampled}/${15} turns to establish`}
+          {rating.established && ` · last ${rating.sampled} turns`}
         </div>
+        {!rating.established && (
+          <div style={{ maxWidth: 340, margin: "12px auto 0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#9fb0c3", marginBottom: 5 }}>
+              <span><b style={{ color: "#67e8f9" }}>{rating.sampled}</b> of 15 turns to an established Rating</span>
+              <span>{Math.round((Math.min(rating.sampled, 15) / 15) * 100)}%</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 5, background: "#152029", overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.round((Math.min(rating.sampled, 15) / 15) * 100)}%`,
+                  background: "linear-gradient(90deg,#67e8f9,#5eead4)",
+                  transition: "width .4s",
+                }}
+              />
+            </div>
+            <p style={{ marginTop: 7, marginBottom: 0, fontSize: 12.5, color: "#9fb0c3" }}>
+              {rating.sampled === 0
+                ? "Do one real task in Claude Code to score your first turn."
+                : `${15 - rating.sampled} more scored turn${15 - rating.sampled === 1 ? "" : "s"} — keep working; each real task adds one.`}
+            </p>
+          </div>
+        )}
         {rating.established && (
           <div
             className="attest"
@@ -122,7 +148,10 @@ export default async function SharePage({ params }: Params) {
           >
             {percentile && (
               <span style={{ color: "#67e8f9" }}>
-                {ordinal(percentile.pct)} percentile of {percentile.n} scored profiles
+                {ordinal(percentile.pct)} percentile of {percentile.n} in the current beta cohort
+                {percentile.seeded > 0 && (
+                  <span style={{ color: "#8b98a9" }}> (incl. {percentile.seeded} seeded sample{percentile.seeded === 1 ? "" : "s"})</span>
+                )}
               </span>
             )}
             <span>

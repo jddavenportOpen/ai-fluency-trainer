@@ -70,6 +70,25 @@ export default function StartForm() {
             real task in Claude Code — your Fluency Rating appears in minutes.
           </p>
 
+          <ol
+            style={{
+              margin: "14px 0 22px",
+              padding: "14px 16px 14px 34px",
+              background: "#0f1620",
+              borderRadius: 10,
+              lineHeight: 1.7,
+              color: "#c9d3df",
+              fontSize: 14,
+            }}
+          >
+            <li>Wire it up (one line below).</li>
+            <li>Do one real task in Claude Code — a fix, a script, a question about your repo.</li>
+            <li>
+              Your <b>first turn scores instantly</b>. After <b>15 turns</b> your Rating goes from
+              provisional to established — the progress bar on your profile counts you up.
+            </li>
+          </ol>
+
           <div className="token-box">
             <code>{done.device_token}</code>
             <button type="button" className="btn" onClick={() => copy("tok", done.device_token)}>
