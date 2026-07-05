@@ -51,13 +51,9 @@ export default function StartForm() {
   }
 
   if (done) {
-    const config = JSON.stringify(
-      { url: "https://clawdacademy.app", token: done.device_token, handle: done.handle },
-      null,
-      2
-    );
-    const cliInstall =
-      "git clone https://github.com/JDDavenport/ai-fluency-trainer && cd ai-fluency-trainer && ./install.sh";
+    const oneLiner =
+      `CLAWDACADEMY_HANDLE=${done.handle} CLAWDACADEMY_TOKEN=${done.device_token} ` +
+      `bash -c "$(curl -fsSL https://clawdacademy.app/install.sh)"`;
     return (
       <div className="auth-shell">
         <div className="auth-card wide">
@@ -81,7 +77,7 @@ export default function StartForm() {
               fontSize: 14,
             }}
           >
-            <li>Wire it up (one line below).</li>
+            <li>Paste the one line below into your terminal (installs everything).</li>
             <li>Do one real task in Claude Code — a fix, a script, a question about your repo.</li>
             <li>
               Your <b>first turn scores instantly</b>. After <b>15 turns</b> your Rating goes from
@@ -89,38 +85,20 @@ export default function StartForm() {
             </li>
           </ol>
 
-          <div className="token-box">
-            <code>{done.device_token}</code>
-            <button type="button" className="btn" onClick={() => copy("tok", done.device_token)}>
-              {copied === "tok" ? "Copied" : "Copy"}
-            </button>
-          </div>
-
-          <p className="auth-lead" style={{ marginTop: 22, marginBottom: 6 }}>
-            <b>Fastest — inside Claude Code:</b>
+          <p className="auth-lead" style={{ marginTop: 8, marginBottom: 6 }}>
+            <b>One line — installs Claude Code + the plugin and wires your profile:</b>
           </p>
           <div className="token-box">
-            <code>/clawdacademy setup --handle {done.handle}</code>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => copy("modeb", `/clawdacademy setup --handle ${done.handle}`)}
-            >
-              {copied === "modeb" ? "Copied" : "Copy"}
+            <code style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{oneLiner}</code>
+            <button type="button" className="btn" onClick={() => copy("one", oneLiner)}>
+              {copied === "one" ? "Copied" : "Copy"}
             </button>
           </div>
-
-          <p className="auth-lead" style={{ marginTop: 18, marginBottom: 6 }}>
-            <b>Or the CLI:</b> save <code>~/.ai-fluency/config.json</code> then run the installer
-            (it detects your config and skips re-claiming):
+          <p className="sub" style={{ marginTop: 8, fontSize: 12.5 }}>
+            Your token is baked into the command above (save it if you want it separately:{" "}
+            <code>{done.device_token}</code>). Already have the Clawdacademy plugin? Just run{" "}
+            <code>/clawdacademy setup --handle {done.handle}</code> inside Claude Code.
           </p>
-          <pre className="config-snippet">{config}</pre>
-          <div className="token-box">
-            <code>{cliInstall}</code>
-            <button type="button" className="btn" onClick={() => copy("cli", cliInstall)}>
-              {copied === "cli" ? "Copied" : "Copy"}
-            </button>
-          </div>
 
           <div className="links" style={{ marginTop: 24 }}>
             <Link className="btn primary" href={`/u/${done.handle}`}>

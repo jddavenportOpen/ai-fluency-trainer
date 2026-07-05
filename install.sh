@@ -32,22 +32,29 @@ API="${CLAWDACADEMY_API:-https://clawdacademy.app}"
 mkdir -p "$FLUENCY_DIR"
 if [[ ! -f "$FLUENCY_DIR/config.json" ]]; then
   HANDLE="${CLAWDACADEMY_HANDLE:-}"
-  if [[ -z "$HANDLE" ]]; then
-    read -rp "Pick a handle for your public profile (3-30, a-z 0-9 -): " HANDLE
-  fi
-  RESP="$(curl -fsS -X POST "$API/api/provision" -H 'Content-Type: application/json' \
-          -d "{\"handle\":\"$HANDLE\"}" 2>/dev/null || true)"
-  TOKEN="$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("device_token",""))' 2>/dev/null || true)"
-  if [[ -z "$TOKEN" ]]; then
-    echo "Could not provision '@$HANDLE' (taken or invalid). Response: $RESP"
-    echo "Re-run with another handle:  CLAWDACADEMY_HANDLE=yourname ./install.sh"
-    exit 1
+  TOKEN="${CLAWDACADEMY_TOKEN:-}"
+  if [[ -n "$TOKEN" && -n "$HANDLE" ]]; then
+    # Already claimed on the web (clawdacademy.app/start) — use the handed-off
+    # token as-is; do NOT re-provision (that would 409 on the taken handle).
+    echo "Using your pre-claimed handle @$HANDLE."
+  else
+    if [[ -z "$HANDLE" ]]; then
+      read -rp "Pick a handle for your public profile (3-30, a-z 0-9 -): " HANDLE
+    fi
+    RESP="$(curl -fsS -X POST "$API/api/provision" -H 'Content-Type: application/json' \
+            -d "{\"handle\":\"$HANDLE\"}" 2>/dev/null || true)"
+    TOKEN="$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("device_token",""))' 2>/dev/null || true)"
+    if [[ -z "$TOKEN" ]]; then
+      echo "Could not provision '@$HANDLE' (taken or invalid). Response: $RESP"
+      echo "Re-run with another handle:  CLAWDACADEMY_HANDLE=yourname ./install.sh"
+      exit 1
+    fi
   fi
   cat > "$FLUENCY_DIR/config.json" <<EOF
 {"url": "$API", "token": "$TOKEN", "handle": "$HANDLE",
  "scorer": "$REPO/scorer/score_turn.py"}
 EOF
-  echo "Provisioned @$HANDLE -> your profile: $API/u/$HANDLE"
+  echo "Configured @$HANDLE -> your profile: $API/u/$HANDLE"
 fi
 
 # 3) Optional statusline wiring — never clobber silently
