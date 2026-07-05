@@ -226,7 +226,7 @@ export default async function SharePage({ params }: Params) {
           <div style={{ fontSize: 15, color: "#e6edf3", marginBottom: 12 }}>
             This is a real behavior profile from real Claude Code sessions. <b>Get yours in minutes.</b>
           </div>
-          <Link className="btn primary" href="/signup">
+          <Link className="btn primary" href="/start">
             Get your Rating →
           </Link>
         </div>

@@ -33,10 +33,10 @@ export default async function Home() {
           </>
         ) : (
           <>
-            <Link className="btn primary" href="/signup">
+            <Link className="btn primary" href="/start">
               Get your Rating
             </Link>
-            <Link className="btn" href="/u/jd">
+            <Link className="btn" href="/u/demo-nova">
               See a live profile →
             </Link>
           </>

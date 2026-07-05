@@ -74,6 +74,13 @@ export default async function LeaderboardPage() {
                       <Link href={`/u/${r.handle}`} style={{ color: "#67e8f9", textDecoration: "none", fontWeight: 600 }}>
                         @{r.handle}
                       </Link>
+                      {r.handle.startsWith("demo-") && (
+                        <span
+                          style={{ marginLeft: 8, fontSize: 11, color: "#8b98a9", border: "1px solid #2a3745", borderRadius: 5, padding: "1px 6px", verticalAlign: "middle" }}
+                        >
+                          sample
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: "12px 16px", color: "#e6edf3" }}>{r.band}</td>
                     <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
@@ -85,6 +92,13 @@ export default async function LeaderboardPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {rows.some((r) => r.handle.startsWith("demo-")) && (
+          <p className="sub" style={{ marginTop: 12, fontSize: 12.5 }}>
+            Profiles tagged <b>sample</b> are seeded demo accounts shown while the board fills in with
+            real users. They span the range so you can read what each band looks like; they are not real people.
+          </p>
         )}
       </div>
     </div>
