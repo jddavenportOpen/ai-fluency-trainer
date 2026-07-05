@@ -7,6 +7,7 @@ import { focusDim, retroTrend } from "@/lib/trainer";
 import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
+  dayStreak,
   dimAverages,
   fluencyRating,
   fmtDateLong,
@@ -80,6 +81,7 @@ export default async function SharePage({ params }: Params) {
   const weakest = weakestEntry ? prettifyDim(weakestEntry[0]) : null;
   const coaching = focusDim(scores);
   const trend = coaching ? retroTrend(scores, coaching.dim) : null;
+  const streak = dayStreak(scores);
   const percentile = rating.established ? await ratingPercentile(user.id, rating.score) : null;
   const viewer = await getCurrentUser();
   const isOwner = viewer?.id === user.id;
@@ -214,6 +216,12 @@ export default async function SharePage({ params }: Params) {
               {trend.moved ? ` — +${trend.delta}. Keep the rep.` : ". This is the one to push on."}
             </p>
           )}
+          <p style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5, color: "#8b98a9", borderTop: "1px solid #1a2530", paddingTop: 10 }}>
+            The daily loop: check your one thing → do one rep → come back tomorrow.
+            {streak >= 2 && (
+              <> You&apos;re on a <b style={{ color: "#f5b971" }}>{streak}-day active streak</b>.</>
+            )}
+          </p>
         </div>
       )}
 

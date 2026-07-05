@@ -235,6 +235,27 @@ export function xpBySession(scores: TurnScoreRow[]): SessionXP[] {
   return [...map.values()].sort((a, b) => a.firstTs.localeCompare(b.firstTs));
 }
 
+/** Consecutive calendar days (ending on the most recent active day) with at least
+ * one scored turn. The visible spine of the daily loop — makes the ritual legible
+ * ("come back tomorrow") instead of a one-off lookup. Honest framing: it's an
+ * ACTIVE streak (days you worked), not a claim you drilled the focus dim. */
+export function dayStreak(scores: TurnScoreRow[]): number {
+  const days = new Set<string>();
+  for (const s of scores) {
+    const d = (s.ts || "").slice(0, 10);
+    if (d) days.add(d);
+  }
+  if (days.size === 0) return 0;
+  const last = [...days].sort().pop()!;
+  const cur = new Date(last + "T00:00:00Z");
+  let streak = 0;
+  while (days.has(cur.toISOString().slice(0, 10))) {
+    streak++;
+    cur.setUTCDate(cur.getUTCDate() - 1);
+  }
+  return streak;
+}
+
 export function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
