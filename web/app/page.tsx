@@ -10,10 +10,16 @@ export default async function Home() {
       <div className="brand">
         Clawd<span className="dot">■</span>academy
       </div>
-      <h1>How well do you use AI — and where to improve.</h1>
+      <h1>Everyone&apos;s getting dumber with AI. Get sharper.</h1>
+      <p style={{ color: "#c9d3df" }}>
+        In a controlled study, developers believed AI made them <b>20% faster</b>. Measured, they
+        were <b>19% slower</b> — and couldn&apos;t tell. You can&apos;t self-assess how well you work
+        with AI. <b>So measure it, then train it.</b>
+      </p>
       <p>
-        The free dashboard for the Clawdacademy plugin: per-dimension scores from your real
-        Claude Code sessions, XP and levels, coaching tips, and a recruiter-shareable profile.
+        Clawdacademy scores 7 behaviors from your <b>real</b> Claude Code sessions — verification,
+        planning, context, diagnosis and more — names your weakest habit, and coaches you in-flow to
+        fix it. Free, local-first, open source.
       </p>
       <div className="links">
         {user ? (
@@ -28,14 +34,17 @@ export default async function Home() {
         ) : (
           <>
             <Link className="btn primary" href="/signup">
-              Sign up
+              Get your Rating
             </Link>
-            <Link className="btn" href="/login">
-              Log in
+            <Link className="btn" href="/u/jd">
+              See a live profile →
             </Link>
           </>
         )}
       </div>
+      <p className="sub" style={{ marginTop: 16, fontSize: 13 }}>
+        Local-first · aggregate-only sync · a verified behavior profile, not a validated score.
+      </p>
     </div>
   );
 }

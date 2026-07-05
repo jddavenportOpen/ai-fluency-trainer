@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Radar from "@/components/Radar";
 import ShareRow from "@/components/ShareRow";
+import { focusDim } from "@/lib/trainer";
 import { getUserByHandle, turnScoresFor, sessionCountFor } from "@/lib/db";
 import {
   dimAverages,
@@ -46,6 +47,7 @@ export default async function SharePage({ params }: Params) {
   const sessions = await sessionCountFor(user.id);
   const weakestEntry = Object.entries(avgs).sort((a, b) => a[1] - b[1])[0];
   const weakest = weakestEntry ? prettifyDim(weakestEntry[0]) : null;
+  const coaching = focusDim(scores);
 
   return (
     <div className="wrap">
@@ -118,6 +120,23 @@ export default async function SharePage({ params }: Params) {
         <p className="sub">Average score per dimension across all scored sessions (0–100).</p>
         <Radar dims={avgs} size={420} />
       </div>
+
+      {coaching && (
+        <div className="card" style={{ maxWidth: 560, margin: "18px auto 0", borderLeft: "3px solid #67e8f9" }}>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#67e8f9", textTransform: "uppercase" }}>
+            Your one thing
+          </div>
+          <h2 style={{ margin: "6px 0 2px" }}>{coaching.lesson.title}</h2>
+          <p className="sub" style={{ marginTop: 0 }}>
+            Weakest habit: <b>{coaching.label}</b> ({coaching.avg}/100) · {coaching.lesson.module}
+          </p>
+          <p style={{ color: "#c9d3df", lineHeight: 1.55 }}>{coaching.lesson.concept_card}</p>
+          <div style={{ marginTop: 10, padding: "11px 13px", background: "#0f1620", borderRadius: 8 }}>
+            <span style={{ color: "#67e8f9", fontWeight: 700 }}>Drill · </span>
+            <span style={{ color: "#e6edf3" }}>{coaching.lesson.drill}</span>
+          </div>
+        </div>
+      )}
 
       <div className="footer-note">
         Behavior profile computed from Claude Code session telemetry, scored on-device and
