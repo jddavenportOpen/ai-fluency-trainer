@@ -25,14 +25,29 @@ bash "$REPO/plugin/bundle.sh"
 claude plugin marketplace add "$REPO" 2>/dev/null || claude plugin marketplace update ai-fluency
 claude plugin install ai-fluency@ai-fluency 2>/dev/null || echo "(plugin already installed)"
 
-# 2) Default config for sync (only if absent)
+# 2) Provision THIS user's own handle + sync token from clawdacademy.app.
+#    Score-first (no email/password): every install gets a distinct identity, so
+#    there is never a shared token and your scores are yours.
+API="${CLAWDACADEMY_API:-https://clawdacademy.app}"
 mkdir -p "$FLUENCY_DIR"
 if [[ ! -f "$FLUENCY_DIR/config.json" ]]; then
+  HANDLE="${CLAWDACADEMY_HANDLE:-}"
+  if [[ -z "$HANDLE" ]]; then
+    read -rp "Pick a handle for your public profile (3-30, a-z 0-9 -): " HANDLE
+  fi
+  RESP="$(curl -fsS -X POST "$API/api/provision" -H 'Content-Type: application/json' \
+          -d "{\"handle\":\"$HANDLE\"}" 2>/dev/null || true)"
+  TOKEN="$(printf '%s' "$RESP" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("device_token",""))' 2>/dev/null || true)"
+  if [[ -z "$TOKEN" ]]; then
+    echo "Could not provision '@$HANDLE' (taken or invalid). Response: $RESP"
+    echo "Re-run with another handle:  CLAWDACADEMY_HANDLE=yourname ./install.sh"
+    exit 1
+  fi
   cat > "$FLUENCY_DIR/config.json" <<EOF
-{"url": "http://localhost:3000", "token": "dev-token-jd", "handle": "jd",
+{"url": "$API", "token": "$TOKEN", "handle": "$HANDLE",
  "scorer": "$REPO/scorer/score_turn.py"}
 EOF
-  echo "Wrote default sync config → $FLUENCY_DIR/config.json"
+  echo "Provisioned @$HANDLE -> your profile: $API/u/$HANDLE"
 fi
 
 # 3) Optional statusline wiring — never clobber silently
@@ -55,8 +70,8 @@ fi
 
 echo
 echo "Installed. Next:"
-echo "  1. Restart Claude Code (plugins load at session start) and use it normally"
-echo "  2. Live coaching:  node $REPO/coach/fluency.js"
-echo "  3. Your stats:     node $REPO/coach/fluency.js --summary"
-echo "  4. Dashboard:      cd $REPO/web && npm install && npm run seed && npm run dev"
-echo "                     then: python3 $REPO/plugin/scripts/sync.py && open http://localhost:3000/dashboard"
+echo "  1. Restart Claude Code (plugins load at session start) and just work normally"
+echo "  2. Live coaching:  node $REPO/coach/fluency.js       (or the statusline)"
+echo "  3. Your one thing: node $REPO/trainer-core/index.js focus"
+echo "  4. Sync + profile: python3 $REPO/plugin/scripts/sync.py"
+echo "                     then open  ${API:-https://clawdacademy.app}/u/${HANDLE:-<your-handle>}"
