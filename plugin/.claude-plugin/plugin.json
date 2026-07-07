@@ -1,6 +1,10 @@
 {
   "name": "ai-fluency",
-  "description": "Captures how you actually use Claude Code and scores your AI fluency — free analytics tier",
+  "displayName": "AI Fluency Trainer",
+  "description": "Captures how you actually use Claude Code and scores 7 AI-fluency behaviors — context-setting, plan-first, verification, diagnose-vs-retry, understanding-seeking, scope discipline, iteration discipline. Scores run entirely on-device; only aggregate turn scores sync to your dashboard. Raw prompts never leave your machine.",
   "version": "0.1.0",
-  "author": { "name": "JD Davenport" }
+  "author": { "name": "JD Davenport", "email": "jddavenport46@gmail.com" },
+  "homepage": "https://clawdacademy.app",
+  "repository": "https://github.com/JDDavenport/ai-fluency-trainer",
+  "license": "MIT"
 }

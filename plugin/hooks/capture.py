@@ -160,6 +160,38 @@ def _sync_throttle_ok(minutes=15):
         return True  # fail-open: a stamp error must not suppress syncs forever
 
 
+def _runtime_warn_once():
+    """Emit a single visible warning (to stderr) when a required runtime is missing.
+
+    Claude Code captures stderr from hooks and surfaces it to the user; this is
+    intentionally fail-open (never raises, never exits non-zero) so the session is
+    never degraded — but the failure IS visible rather than silent.
+
+    Writes a sentinel file so the warning fires only once per install, not on every
+    hook invocation.
+    """
+    import shutil
+    sentinel = os.path.join(FLUENCY_DIR, "state", "runtime-ok.stamp")
+    if os.path.exists(sentinel):
+        return
+    missing = []
+    if not shutil.which("python3"):
+        missing.append("python3 (scorer disabled — install via brew/apt then restart Claude Code)")
+    if not shutil.which("node"):
+        missing.append("node (intervention hook disabled — install via brew/apt then restart Claude Code)")
+    try:
+        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+        if not missing:
+            open(sentinel, "w").close()
+            return
+        # Warn loudly; do NOT write the sentinel so the warning re-fires next session
+        # until the user actually installs the missing runtime.
+        for m in missing:
+            print(f"AI Fluency: {m}", file=sys.stderr)
+    except Exception:
+        pass
+
+
 def main():
     payload = json.load(sys.stdin)
     hook = payload.get("hook_event_name", "")
@@ -174,6 +206,7 @@ def main():
         emit(sid, "session_kind", {"kind": kind})
 
     if hook == "SessionStart":
+        _runtime_warn_once()
         emit(sid, "session_start", {
             "source": payload.get("source", ""),
             # sha256 (not hash()): stable across processes, so the same project

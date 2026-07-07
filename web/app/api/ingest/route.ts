@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserByToken, ingestEvents, type IngestEvent } from "@/lib/db";
+import { checkRateLimit, clientIp } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Generous cap: ingest is legit high-frequency traffic. The official client
+// syncs about every 15 min (~1 req / 15 min = ~40/10h), so 120 requests per
+// 10-minute window is orders of magnitude above any real user - it only bites
+// a flood. Keyed by device token when present (so one hot token is throttled
+// without touching anyone else), else by IP so an anonymous/bad-token flood
+// gets stopped BEFORE it costs a getUserByToken DB read on every request.
+const INGEST_LIMIT = 120;
+const INGEST_WINDOW_SEC = 10 * 60; // 10 minutes
 
 /**
  * POST /api/ingest
@@ -13,6 +23,19 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+
+  // Rate-limit BEFORE the auth DB lookup: key on the token when present, else
+  // on the client IP, so a bad-token/anonymous flood is stopped before it costs
+  // a DB read per request. Fail-open inside checkRateLimit on any limiter error.
+  const rlKey = token ? `ingest:tok:${token}` : `ingest:ip:${clientIp(req)}`;
+  const rl = await checkRateLimit(rlKey, INGEST_LIMIT, INGEST_WINDOW_SEC);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "rate limit exceeded - slow down" },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
   const user = token ? await getUserByToken(token) : undefined;
   if (!user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });

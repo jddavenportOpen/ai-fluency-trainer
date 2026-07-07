@@ -10,6 +10,62 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 FLUENCY_DIR="${AI_FLUENCY_DIR:-$HOME/.ai-fluency}"
 SETTINGS="$HOME/.claude/settings.json"
 
+# ── Runtime preflight ──────────────────────────────────────────────────────────
+# The plugin hooks require python3 (scoring) and node (intervention/coaching).
+# Without them the hooks exit silently and the user sees a blank profile forever.
+# Check here, loudly, before we install anything.
+preflight_check() {
+  local ok=1
+
+  # python3 (>=3.8 required by the scorer)
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf '\033[31m✗ python3 not found.\033[0m\n' >&2
+    printf '  The AI Fluency scorer requires Python 3.8+.\n' >&2
+    printf '  Install it:\n' >&2
+    printf '    macOS:         brew install python3\n' >&2
+    printf '    Debian/Ubuntu: sudo apt install python3\n' >&2
+    printf '    Fedora/RHEL:   sudo dnf install python3\n' >&2
+    ok=0
+  else
+    local pyver
+    pyver="$(python3 -c 'import sys; print("%d%02d" % sys.version_info[:2])' 2>/dev/null || echo "0")"
+    if [ "$pyver" -lt 308 ] 2>/dev/null; then
+      printf '\033[31m✗ python3 is too old (need 3.8+, got %s).\033[0m\n' \
+        "$(python3 --version 2>&1 | awk '{print $2}')" >&2
+      printf '  Upgrade: brew upgrade python3  OR  sudo apt install python3\n' >&2
+      ok=0
+    fi
+  fi
+
+  # node (required by the intervention/coaching hook)
+  if ! command -v node >/dev/null 2>&1; then
+    printf '\033[31m✗ node not found.\033[0m\n' >&2
+    printf '  The AI Fluency intervention hook requires Node.js.\n' >&2
+    printf '  Install it:\n' >&2
+    printf '    macOS:         brew install node\n' >&2
+    printf '    Debian/Ubuntu: sudo apt install nodejs\n' >&2
+    printf '    Fedora/RHEL:   sudo dnf install nodejs\n' >&2
+    printf '    Or via nvm:    https://github.com/nvm-sh/nvm\n' >&2
+    ok=0
+  fi
+
+  # git (required for repo operations + provisioning)
+  if ! command -v git >/dev/null 2>&1; then
+    printf '\033[31m✗ git not found.\033[0m\n' >&2
+    printf '  Install it:\n' >&2
+    printf '    macOS:         xcode-select --install\n' >&2
+    printf '    Debian/Ubuntu: sudo apt install git\n' >&2
+    ok=0
+  fi
+
+  if [ "$ok" -eq 0 ]; then
+    printf '\n\033[31mInstall the missing runtime(s) above, then re-run ./install.sh\033[0m\n' >&2
+    exit 1
+  fi
+}
+
+preflight_check
+
 if [[ "${1:-}" == "--uninstall" ]]; then
   claude plugin uninstall ai-fluency 2>/dev/null || true
   claude plugin marketplace remove ai-fluency 2>/dev/null || true

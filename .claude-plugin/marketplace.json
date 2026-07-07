@@ -1,11 +1,27 @@
 {
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
   "name": "ai-fluency",
-  "owner": { "name": "JD Davenport" },
+  "owner": {
+    "name": "JD Davenport",
+    "email": "jddavenport46@gmail.com"
+  },
+  "description": "Measures and trains AI fluency from your real Claude Code sessions — local-first, aggregate-only sync",
   "plugins": [
     {
       "name": "ai-fluency",
+      "displayName": "AI Fluency Trainer",
       "source": "./plugin",
-      "description": "Captures how you actually use Claude Code and scores your AI fluency — local-first, aggregate-only sync"
+      "description": "Captures how you actually use Claude Code and scores 7 AI-fluency behaviors — context-setting, plan-first, verification, diagnose-vs-retry, understanding-seeking, scope discipline, iteration discipline. Scores run entirely on-device. Only aggregate turn scores sync to your dashboard; raw prompts never leave your machine.",
+      "version": "0.1.0",
+      "author": {
+        "name": "JD Davenport",
+        "email": "jddavenport46@gmail.com"
+      },
+      "homepage": "https://clawdacademy.app",
+      "repository": "https://github.com/JDDavenport/ai-fluency-trainer",
+      "license": "MIT",
+      "category": "productivity",
+      "tags": ["ai-fluency", "learning", "analytics", "habits", "coaching", "metrics"]
     }
   ]
 }

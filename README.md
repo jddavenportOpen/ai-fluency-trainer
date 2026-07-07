@@ -9,7 +9,55 @@ and coaches you in-flow to fix it. Free, local-first, open source (MIT).
 
 Live at **[clawdacademy.app](https://clawdacademy.app)**.
 
-## 🔒 Privacy — local-first, aggregate-only, audit-invited (read this first)
+## Data disclosure — what the plugin captures and what leaves your machine
+
+This plugin fires Claude Code hooks to observe your sessions. Here is the complete, accurate picture.
+
+### What the plugin captures (stays local by default)
+
+The capture hook (`plugin/hooks/capture.py`) appends structured events to `~/.ai-fluency/events.jsonl`:
+
+| Event | What is recorded locally |
+|---|---|
+| `session_start` | Session ID, SHA-256 of the working directory path (10 hex chars, not the path itself), session kind |
+| `prompt` | Raw prompt text (word/char count + full text — **local only, never synced**) |
+| `tool_use` | Tool name, success/failure, list of input key names (not values) |
+| `tool_failure` | Tool name, error type (first 80 chars) |
+| `turn_end` | Session ID, transcript path (local path, never synced) |
+| `turn_score` | 7 dimension scores + XP (numbers only, produced by the on-device scorer) |
+| `session_end` | Session ID, reason |
+| `permission` | Tool name, decision |
+| `compact` | Phase (pre/post), trigger |
+
+**All scoring runs on-device.** The scorer (`scorer/score_turn.py`) reads your local transcript and writes numeric scores to `events.jsonl` without sending anything anywhere.
+
+### What leaves your machine (opt-in, token-gated)
+
+Sync (`plugin/scripts/sync.py`) is **opt-in and requires a token** in `~/.ai-fluency/config.json`. Nothing syncs until you set `"token"`. With a token, the sync layer uploads only:
+
+| Field synced | Value |
+|---|---|
+| `turn_score` events | 7 dimension scores, XP, session ID, timestamp |
+| `session_start` events | Session ID, timestamp, session kind |
+| `session_end` events | Session ID, timestamp, reason |
+
+**What is NEVER synced, under any config:**
+- Raw prompt text (`text` field) — stripped by `STRIP_KEYS` in `sync.py` before the payload is built
+- Transcript paths — also in `STRIP_KEYS`
+- Headless / non-interactive sessions (fleet agents, `claude -p` runs) — excluded by default
+- In-flow coaching tips (these can interpolate prompt fragments) — local-only unless you set `"sync_tips": true`
+
+The strip is enforced client-side in `plugin/scripts/sync.py` (`STRIP_KEYS = {"transcript_path", "text"}`) and server-side on receipt.
+
+### How to verify and disable
+
+- **Audit the exact payload before anything leaves:** `python3 plugin/scripts/sync.py --dry-run`
+- **Disable upload entirely:** add `"no_upload": true` to `~/.ai-fluency/config.json`, or just omit the `"token"` field
+- **Read the full path in code:** `plugin/hooks/capture.py` (what is captured locally), `plugin/scripts/sync.py` (what is sent)
+
+The whole pipeline is MIT-licensed and open. Nothing about what leaves your machine is hidden.
+
+### Legacy section (kept for reference)
 
 Your raw prompts and code **never leave your machine**. This is a telemetry plugin from a solo
 publisher, so don't take that on faith — **audit it**, the whole path is open (MIT):
