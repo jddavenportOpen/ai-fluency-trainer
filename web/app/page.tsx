@@ -45,6 +45,11 @@ export default async function Home() {
       <p className="sub" style={{ marginTop: 16, fontSize: 13 }}>
         Local-first · aggregate-only sync · a verified behavior profile, not a validated score.
       </p>
+      <p className="sub" style={{ marginTop: 10, fontSize: 13 }}>
+        <Link href="/how-it-works" style={{ color: "var(--accent)" }}>
+          How it works →
+        </Link>
+      </p>
     </div>
   );
 }

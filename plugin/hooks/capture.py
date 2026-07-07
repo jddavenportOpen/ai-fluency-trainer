@@ -128,6 +128,38 @@ def _find_scorer():
     return None
 
 
+def _find_sync():
+    """Resolve the sync script. Order: explicit env var, plugin-bundled copy,
+    repo-relative checkout, well-known path."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or os.path.dirname(here)
+    candidates = [
+        os.environ.get("AI_FLUENCY_SYNC", ""),
+        os.path.join(plugin_root, "scripts", "sync.py"),
+        os.path.normpath(os.path.join(here, "..", "scripts", "sync.py")),
+        os.path.expanduser("~/code/ai-fluency-trainer/plugin/scripts/sync.py"),
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def _sync_throttle_ok(minutes=15):
+    """Return True (and update stamp) if enough time has passed since the last
+    auto-sync. Prevents hammering the backend on every Stop. Fail-open on errors."""
+    try:
+        import time
+        stamp = os.path.join(FLUENCY_DIR, "state", "last_sync.stamp")
+        if os.path.exists(stamp) and (time.time() - os.path.getmtime(stamp)) < minutes * 60:
+            return False
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        open(stamp, "w").close()
+        return True
+    except Exception:
+        return True  # fail-open: a stamp error must not suppress syncs forever
+
+
 def main():
     payload = json.load(sys.stdin)
     hook = payload.get("hook_event_name", "")
@@ -180,6 +212,19 @@ def main():
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
+            # Auto-sync: fire sync.py in the background, throttled to once per 15 min.
+            # Fail-open: any exception or missing config key silently skips sync.
+            # The manual `sync.py` path still works and is not removed.
+            cfg = load_config()
+            no_consent = cfg.get("no_upload") or cfg.get("sync_disabled")
+            if cfg.get("token") and not no_consent and _sync_throttle_ok():
+                sync = _find_sync()
+                if sync:
+                    subprocess.Popen(
+                        [sys.executable, sync],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
     elif hook == "SessionEnd":
         emit(sid, "session_end", {"reason": payload.get("reason", "")})
     elif hook == "PostToolUseFailure":
