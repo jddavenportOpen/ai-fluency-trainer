@@ -21,6 +21,37 @@ NA = None   # 'dimension not applicable this turn' — distinct from a COMPUTED 
 
 MUTATING_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 EXPLORE_TOOLS = {"Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "Task", "TodoWrite"}
+# Tools that inspect a file/target after the fact (read the diff, cat the output).
+INSPECT_TOOLS = {"Read", "Grep", "Glob", "LS"}
+# Bash commands that inspect/diagnose rather than verify (read a file, print a
+# diff, tail a log, inspect state). First-token matched, same discipline as
+# is_verify_command — never natural language inside the command string.
+_INSPECT_HEAD = {
+    "cat", "less", "head", "tail", "grep", "rg", "diff", "git", "ls", "find",
+    "sed", "awk", "jq", "wc", "stat", "env", "printenv", "echo",
+}
+# git subcommands that count as inspection (git alone is too broad).
+_GIT_INSPECT = {"diff", "status", "log", "show", "blame"}
+
+
+def _file_path_of(tool):
+    inp = tool.get("input") or {}
+    return str(inp.get("file_path") or inp.get("path") or inp.get("notebook_path") or "")
+
+
+def is_inspect_command(cmd):
+    """True if the FIRST shell segment inspects/diagnoses state (cat/grep/git diff/
+    tail a log). Same tokenizing discipline as is_verify_command."""
+    for seg in _SEGMENT_SPLIT_RE.split(cmd or ""):
+        toks = [t for t in seg.strip().split() if not _ENV_ASSIGN_RE.match(t)]
+        if not toks:
+            continue
+        head = toks[0].rsplit("/", 1)[-1]
+        if head == "git":
+            return len(toks) > 1 and toks[1] in _GIT_INSPECT
+        if head in _INSPECT_HEAD:
+            return True
+    return False
 
 # ---------------------------------------------------------------- regexes ----
 PATH_RE = re.compile(
@@ -331,18 +362,50 @@ def is_calibrated_oracle(turn):
     return len(mut_files) == 1
 
 
-def score_context_setting(turn, ctx):
+def score_context_setting(turn, ctx, state=None):
+    """Context is AMBIENT, not re-typed every turn. PRIMARY signals now include
+    context the user actually PROVIDED to the model — @file / path references,
+    a loaded CLAUDE.md / project context, files the turn reads to ground the
+    work — plus context accumulated earlier in the session. A power user with a
+    loaded CLAUDE.md and @file refs does not have to re-paste the codebase each
+    turn to score well; keyword-only ceremony is not enough on its own."""
     p = turn["prompt"]
     words = len(p.split())
     files = len(PATH_RE.findall(p)) + len(BACKTICK_RE.findall(p))
     constraints = len(CONSTRAINT_RE.findall(p))
     score = min(words, 60) / 60.0 * 40 + min(files, 3) * 12 + min(constraints, 4) * 8
+
+    # --- behavioral / ambient context signals ---
+    at_refs = p.count("@")               # @file / @dir references the user attached
+    reads_this_turn = sum(1 for t in turn["tools"] if t["name"] in INSPECT_TOOLS)
+    claude_md = state.get("claude_md_loaded") if state else False
+    prior_files = state.get("ctx_files_seen", 0) if state else 0
+    # @file attachments are provided context: credit like file refs.
+    score += min(at_refs, 3) * 10
+    # The turn grounds itself by reading real project files (ambient context the
+    # user is steering the model to load) — a behavioral, harder-to-fake signal,
+    # weighted above prose word-count so a grounded terse turn beats ceremony.
+    score += min(reads_this_turn, 3) * 9
+    # A loaded CLAUDE.md / project context is standing context for the whole
+    # session: a session-wide credit (not per-turn re-paste required).
+    if claude_md:
+        score += 16
+    # Established session context: files already surfaced earlier this session
+    # mean a terse follow-up is still well-grounded — don't demand a re-brief.
+    if turn["index"] > 1 and prior_files >= 1:
+        score += min(prior_files, 5) * 6
+
     if turn["index"] > 1 and words >= 15:
         score += 20   # in-session context accumulates; substantive follow-ups need less restating
     bare_imperative = _first_word(p) in IMPERATIVE_OPENERS and words < 8
+    # A bare imperative is only "into the dark" when there's NO ambient context
+    # to lean on. If the session has established context (CLAUDE.md, files
+    # already read, @refs), a terse directive is calibrated delegation, not a
+    # blind one — soften the cap rather than slam it to 15.
     if bare_imperative:
-        score = min(score, 15)   # bare imperative into a codebase
-    if words < 4:
+        has_ambient = claude_md or prior_files >= 1 or at_refs or reads_this_turn
+        score = min(score, 55 if has_ambient else 15)
+    if words < 4 and not (state and (claude_md or prior_files >= 1)):
         score = min(score, 10)
     # Fit-to-task: a conceptual question with no mutation requested doesn't
     # need file paths and constraints — don't punish pure Q&A for brevity.
@@ -397,33 +460,93 @@ def score_plan_first(turn, ctx, state):
 
 
 def score_verification(turn, ctx):
-    tool_names = [t["name"] for t in turn["tools"]]
+    """PRIMARY = real verification BEHAVIOR in the turn's tool sequence (ran
+    tests/build/lint, inspected the diff/file AFTER a mutation, re-ran after a
+    failure and it passed). Keyword/manual-verify claims are a MINOR secondary
+    signal. A power user who verifies by running tests + reading the diff scores
+    high even with a terse prompt and no "verify this" narration."""
+    tools = turn["tools"]
+    tool_names = [t["name"] for t in tools]
     mut_idx = [i for i, n in enumerate(tool_names) if n in MUTATING_TOOLS]
+
+    # Behavioral signals available whether or not the turn mutated.
+    ran_test = ""          # a real test/build/lint/run command anywhere in turn
+    ran_test_ok = False    # ...and it succeeded (green after change)
+    for t in tools:
+        if t["name"] == "Bash":
+            cmd = str((t.get("input") or {}).get("command", ""))
+            if is_verify_command(cmd):
+                ran_test = cmd
+                ran_test_ok = ran_test_ok or bool(t.get("ok"))
+
     if not mut_idx:
+        # Nothing was mutated this turn. If the user still RAN the code / tests
+        # (verifying existing behavior, reproducing a bug), that is genuine
+        # verification behavior — credit it. Pure exploration stays NA.
+        if ran_test:
+            ctx.update(edits=0, mut_files="-", verify_cmd=ran_test[:60])
+            return 88 if ran_test_ok else 78
         return NA   # fit-to-task: nothing to verify
+
     edits = len(mut_idx)
-    mut_files = ", ".join(sorted({
-        str((turn["tools"][i]["input"] or {}).get("file_path", "?")).rsplit("/", 1)[-1]
-        for i in mut_idx})[:4])
+    first_mut = mut_idx[0]
+    mut_files_set = {_file_path_of(tools[i]) for i in mut_idx}
+    mut_basenames = {p.rsplit("/", 1)[-1] for p in mut_files_set if p}
+    mut_files = ", ".join(sorted(mut_basenames)[:4])
+
+    # Did a verify command run AFTER the first mutation? (test the new code)
     verify_cmd = ""
-    for i, t in enumerate(turn["tools"]):
-        if t["name"] == "Bash" and i >= mut_idx[0]:
-            cmd = str((t["input"] or {}).get("command", ""))
+    verify_ok = False
+    for i, t in enumerate(tools):
+        if t["name"] == "Bash" and i >= first_mut:
+            cmd = str((t.get("input") or {}).get("command", ""))
             if is_verify_command(cmd):
                 verify_cmd = cmd
+                verify_ok = bool(t.get("ok"))
                 break
+
+    # Did the user INSPECT a mutated file after editing it? (read the diff / the
+    # written file, git diff, cat it) — the "read the diff" habit, tool-observed.
+    inspected_diff = False
+    for i, t in enumerate(tools):
+        if i <= first_mut:
+            continue
+        if t["name"] in INSPECT_TOOLS:
+            fp = _file_path_of(t)
+            if not fp or fp in mut_files_set or not mut_files_set:
+                inspected_diff = True
+                break
+        if t["name"] == "Bash":
+            if is_inspect_command(str((t.get("input") or {}).get("command", ""))):
+                inspected_diff = True
+                break
+
     ctx.update(edits=edits, mut_files=mut_files, verify_cmd=verify_cmd[:60])
+
+    # --- primary behavioral score ---
     if verify_cmd:
-        return 95
+        return 95 if verify_ok else 82   # ran it green vs ran it and it errored
+    if inspected_diff:
+        return 80    # read the diff / inspected the mutated file after editing
+    # secondary: keyword claim of verification in the follow-up prompt. This is
+    # an UNBACKED claim (no tool evidence in the turn), so it is a minor signal,
+    # not a pass: capped well below tool-observed verification so ritual
+    # "I verified it" narration can't reach the score of actually running it.
     nxt = turn.get("next_prompt") or ""
     if MANUAL_VERIFY_RE.search(nxt):
-        return 75      # user verified by hand and said so
+        return 45      # user *says* they verified by hand; no tool evidence
     if FAILURE_LANG_RE.search(nxt):
         return 40      # user did run it — but only because it broke on them
     return 15
 
 
 def score_diagnose_vs_retry(turn, ctx, state):
+    """After a failure, did the user DIAGNOSE (inspect the error, run a
+    diagnostic, change approach) or blindly RETRY the same failing thing?
+    PRIMARY signal is now the tool sequence: reading the failing file / error,
+    running a git-diff or grep or a fresh diagnostic command, changing the
+    command that failed — all observed from tools, not narration. Keyword
+    hypothesis/error-evidence in the prompt is a secondary bonus."""
     p = turn["prompt"]
     failure_ctx = state["prev_tool_error"] or bool(FAILURE_LANG_RE.search(p))
     sim = _token_similarity(p, state["prev_prompt"])
@@ -431,22 +554,62 @@ def score_diagnose_vs_retry(turn, ctx, state):
     if not failure_ctx:
         return NA
     words = len(p.split())
-    if BARE_RETRY_RE.match(p) or (words < 6 and not ERROR_EVIDENCE_RE.search(p)):
+
+    # --- behavioral diagnosis signals (this turn's tools) ---
+    tools = turn["tools"]
+    tool_names = [t["name"] for t in tools]
+    inspected = any(n in INSPECT_TOOLS for n in tool_names)
+    for t in tools:
+        if t["name"] == "Bash" and is_inspect_command(str((t.get("input") or {}).get("command", ""))):
+            inspected = True
+            break
+    # blind retry = re-issued the SAME command that failed last turn, with no
+    # inspection first. Compare this turn's bash commands to the prior failed set.
+    prev_failed = state.get("prev_failed_cmds") or set()
+    this_cmds = {str((t.get("input") or {}).get("command", "")).strip()
+                 for t in tools if t["name"] == "Bash"}
+    repeated_failing_cmd = bool(prev_failed & this_cmds)
+    changed_approach = bool(this_cmds - prev_failed) or any(
+        n in MUTATING_TOOLS for n in tool_names)
+    ctx.update(inspected=inspected)
+
+    # A prompt-level bare retry with no inspecting tools is still a blind retry.
+    if (BARE_RETRY_RE.match(p) or (words < 6 and not ERROR_EVIDENCE_RE.search(p))) and not inspected:
         ctx["bare_retry"] = True
         return 8 if sim > 0.3 or words <= 4 else 15
+
     score = 15
-    if words >= 12:
-        score += 20
-    if words >= 25:
-        score += 10
-    if HYPOTHESIS_RE.search(p):
-        score += 20
-    if ERROR_EVIDENCE_RE.search(p) or PATH_RE.search(p):
+    # primary: tool-observed diagnosis
+    if inspected:
+        score += 30   # read the error / diffed / grepped before acting again
+    # A different command counts as changing approach; but a BARE mutation with
+    # no inspection first (blindly re-editing the file that just failed) is a
+    # retry dressed up, not a diagnosis — don't credit it.
+    if inspected and changed_approach and not repeated_failing_cmd:
         score += 15
+    if repeated_failing_cmd and not inspected:
+        score -= 20   # re-ran the exact failing command with no diagnosis
+    # secondary: prompt-level reasoning signals (ceremony-farmable, so kept
+    # SMALL — capped in aggregate below so words+keywords alone can't pass).
+    kw = 0
+    if words >= 12:
+        kw += 8
+    if words >= 25:
+        kw += 4
+    if HYPOTHESIS_RE.search(p):
+        kw += 8
+    if ERROR_EVIDENCE_RE.search(p) or PATH_RE.search(p):
+        kw += 8
     if MANUAL_VERIFY_RE.search(p):
-        score += 20   # "I ran it and observed X" = real diagnostic input
-    if sim > 0.5:
-        score -= 15   # near-duplicate of the failed prompt
+        kw += 8
+    # Without any tool-observed diagnosis, prompt keywords alone are capped so a
+    # verbose "I verified it fails, let me fix this" (pure narration) can't
+    # reach the score of a user who actually inspected before acting.
+    if not inspected:
+        kw = min(kw, 20)
+    score += kw
+    if sim > 0.5 and not inspected:
+        score -= 15   # near-duplicate of the failed prompt, no new diagnosis
     return _clamp(score)
 
 
@@ -519,7 +682,35 @@ def new_session_state():
         "session_mutated": False, "plan_requested": False, "explored": False,
         "plan_established": False, "prev_prompt": "", "prev_tool_error": False,
         "total_turns": 0, "und_turns": 0,
+        # ambient-context tracking (behavioral context_setting signals)
+        "claude_md_loaded": False,   # a CLAUDE.md / project-context file was read
+        "ctx_files_seen": 0,         # distinct project files surfaced so far
+        "seen_files": set(),
+        "prev_failed_cmds": set(),   # bash commands that errored last turn
     }
+
+
+_CLAUDE_MD_RE = re.compile(r"claude\.md$|\.claude/|(?:^|/)agents?\.md$", re.I)
+
+
+def _update_ambient_context(turn, state):
+    """Roll session-wide context signals forward from this turn's tool use +
+    prompt: a loaded CLAUDE.md, and the set of distinct project files the model
+    has been pointed at (read or attached). These make later terse turns
+    legitimately well-grounded."""
+    for t in turn["tools"]:
+        if t["name"] in INSPECT_TOOLS:
+            fp = _file_path_of(t)
+            if fp:
+                if _CLAUDE_MD_RE.search(fp):
+                    state["claude_md_loaded"] = True
+                state["seen_files"].add(fp)
+    # path / @file references in the prompt also establish standing context
+    for m in PATH_RE.findall(turn["prompt"] or ""):
+        state["seen_files"].add(m)
+        if _CLAUDE_MD_RE.search(m):
+            state["claude_md_loaded"] = True
+    state["ctx_files_seen"] = len(state["seen_files"])
 
 
 def _tip_index(dim_key, turn, ctx):
@@ -581,10 +772,11 @@ def score_session(turns, only_complete=True, judge=None):
             # It still rolls state forward so the next (human) turn sees it.
             state["prev_prompt"] = turn["prompt"]
             state["prev_tool_error"] = any(not t["ok"] for t in turn["tools"])
+            _update_ambient_context(turn, state)
             continue
         ctx = {}
         dims = {
-            "context_setting": score_context_setting(turn, ctx),
+            "context_setting": score_context_setting(turn, ctx, state),
             "plan_first": score_plan_first(turn, ctx, state),
             "verification": score_verification(turn, ctx),
             "diagnose_vs_retry": score_diagnose_vs_retry(turn, ctx, state),
@@ -636,4 +828,9 @@ def score_session(turns, only_complete=True, judge=None):
         # roll state forward
         state["prev_prompt"] = turn["prompt"]
         state["prev_tool_error"] = any(not t["ok"] for t in turn["tools"])
+        state["prev_failed_cmds"] = {
+            str((t.get("input") or {}).get("command", "")).strip()
+            for t in turn["tools"] if t["name"] == "Bash" and not t["ok"]
+        }
+        _update_ambient_context(turn, state)
     return results
