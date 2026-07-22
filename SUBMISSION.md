@@ -44,7 +44,7 @@ public profile with recruiters.
 
 **Repository URL**
 ```
-https://github.com/JDDavenport/ai-fluency-trainer
+https://github.com/jddavenportOpen/ai-fluency-trainer
 ```
 
 **Homepage / docs URL**
@@ -112,6 +112,6 @@ Nothing leaves the machine unless the user sets a `"token"` field in
 ## Install command (for users, after marketplace is live)
 
 ```
-/plugin marketplace add JDDavenport/ai-fluency-trainer
+/plugin marketplace add jddavenportOpen/ai-fluency-trainer
 /plugin install ai-fluency@ai-fluency
 ```

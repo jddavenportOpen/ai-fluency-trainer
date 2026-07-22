@@ -11,7 +11,7 @@
 # plugin + your score-first profile). No prior clone, no plugin-first chicken-and-egg.
 set -euo pipefail
 
-REPO_URL="https://github.com/JDDavenport/ai-fluency-trainer"
+REPO_URL="https://github.com/jddavenportOpen/ai-fluency-trainer"
 SRC="${CLAWDACADEMY_HOME:-$HOME/.clawdacademy/src}"
 
 say() { printf '\033[36m›\033[0m %s\n' "$*"; }

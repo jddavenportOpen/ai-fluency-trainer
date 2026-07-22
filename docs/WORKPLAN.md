@@ -20,7 +20,7 @@ Rule: update this file as work ships (continuous-shipping).
 - [x] `install.sh` — marketplace add + plugin install + config; --statusline opt-in (never clobbers existing), --uninstall
 - [x] Live E2E VERIFIED: real `claude -p` session → hooks captured → scorer graded turn (verification 95 for real test run, plan_first 15 for cold-start — both correct) → coach/statusline rendered → synced → in dashboard DB + /u/jd
 - [x] README with 10-min demo path
-- [x] Pushed to private GitHub JDDavenport/ai-fluency-trainer
+- [x] Pushed to private GitHub jddavenportOpen/ai-fluency-trainer
 
 ## Phase 2.5 — LAUNCH DAY ✅ DONE 2026-07-03 (JD directive: two products live today)
 - [x] Desktop app "Fluency Coach" (Electron, packaged .app, screenshot-verified UI, adversarially verified; truncation re-seed bug fixed)

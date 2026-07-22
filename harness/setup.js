@@ -18,7 +18,7 @@ const bootstrap = require("../desktop/bootstrap/claude-code.js");
 const core = require("../coach-core");
 
 // One place for the install surface (rebrand/repo rename touches only these).
-const MARKETPLACE = "JDDavenport/ai-fluency-trainer";
+const MARKETPLACE = "jddavenportOpen/ai-fluency-trainer";
 const PLUGIN_NAME = "ai-fluency";
 const PROVISION_API = process.env.CLAWDACADEMY_API || "https://clawdacademy.app";
 const claudeSettings = () => path.join(os.homedir(), ".claude", "settings.json");
