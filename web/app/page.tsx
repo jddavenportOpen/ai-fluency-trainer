@@ -49,6 +49,10 @@ export default async function Home() {
         <Link href="/how-it-works" style={{ color: "var(--accent)" }}>
           How it works →
         </Link>
+        {" · "}
+        <Link href="/docs" style={{ color: "var(--accent)" }}>
+          Docs →
+        </Link>
       </p>
     </div>
   );

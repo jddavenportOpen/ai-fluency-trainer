@@ -39,6 +39,7 @@ export default function HowItWorks() {
         </Link>
         <span className="verified" style={{ display: "inline-flex", gap: 14, alignItems: "center" }}>
           <Link href="/leaderboard" style={{ color: "inherit", textDecoration: "none" }}>Leaderboard</Link>
+          <Link href="/docs" style={{ color: "inherit", textDecoration: "none" }}>Docs</Link>
           <Link href="/start" style={{ color: "inherit", textDecoration: "none" }}>Get your Rating</Link>
         </span>
       </div>
