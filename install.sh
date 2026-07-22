@@ -113,6 +113,11 @@ EOF
   echo "Configured @$HANDLE -> your profile: $API/u/$HANDLE"
 fi
 
+# 2b) Instant-rating backfill — score the user's EXISTING Claude Code history
+#     ONCE so their Fluency Rating is established in seconds, not after ~15 live
+#     turns. Runs once (sentinel), fails open (never blocks the install).
+python3 "$REPO/plugin/scripts/backfill.py" 2>/dev/null || true
+
 # 3) Optional statusline wiring — never clobber silently
 if [[ "${1:-}" == "--statusline" || "${1:-}" == "--force-statusline" ]]; then
   python3 - "$1" <<PYEOF

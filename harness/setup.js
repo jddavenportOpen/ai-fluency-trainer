@@ -120,6 +120,15 @@ async function setup({ onProgress = () => {}, autoInstall = false, force = false
   steps.push({ step: "config", file: writeConfig() });
   const prov = await provision(handle);
   steps.push({ step: "provision", ...prov });
+  // Instant-rating backfill: score the user's EXISTING Claude Code history once
+  // so their Fluency Rating is established immediately, not after ~15 live turns.
+  // Runs once (sentinel), fails open — never blocks setup.
+  if (prov.ok) {
+    const bf = await run("python3", [
+      path.join(__dirname, "..", "plugin", "scripts", "backfill.py"),
+    ]);
+    steps.push({ step: "backfill", ok: bf.ok, out: bf.out.slice(-200) });
+  }
   const next = prov.ok
     ? `Do one real task in Claude Code; your Fluency Rating appears in the statusline and at ${prov.profile || PROVISION_API + "/u/" + (prov.handle || "<handle>")}.`
     : `Provisioning skipped (${prov.reason}). Claim your profile: node ${path.relative(process.cwd(), __filename)} setup --handle yourname`;

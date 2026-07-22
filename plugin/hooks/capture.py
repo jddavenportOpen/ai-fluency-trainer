@@ -145,6 +145,41 @@ def _find_sync():
     return None
 
 
+def _find_backfill():
+    """Resolve backfill.py (bundled next to sync.py). Same order as _find_sync."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or os.path.dirname(here)
+    for c in (os.environ.get("AI_FLUENCY_BACKFILL", ""),
+              os.path.join(plugin_root, "scripts", "backfill.py"),
+              os.path.normpath(os.path.join(here, "..", "scripts", "backfill.py")),
+              os.path.expanduser("~/code/ai-fluency-trainer/plugin/scripts/backfill.py")):
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def _maybe_backfill(cfg):
+    """Fire the instant-rating backfill ONCE (sentinel-guarded), in the
+    background. Only when the user has a token (provisioned) and the sentinel is
+    absent. Fail-open: never raises, never blocks SessionStart. backfill.py
+    itself re-checks the sentinel, so a double-fire is a harmless no-op."""
+    try:
+        sentinel = os.path.join(FLUENCY_DIR, "state", "backfill.done")
+        if os.path.exists(sentinel) or not cfg.get("token"):
+            return
+        if cfg.get("no_upload") or cfg.get("sync_disabled"):
+            return
+        bf = _find_backfill()
+        if bf:
+            subprocess.Popen(
+                [sys.executable, bf],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except Exception:
+        pass
+
+
 def _sync_throttle_ok(minutes=15):
     """Return True (and update stamp) if enough time has passed since the last
     auto-sync. Prevents hammering the backend on every Stop. Fail-open on errors."""
@@ -215,6 +250,8 @@ def main():
             "transcript_path": transcript,
             "kind": kind,
         })
+        # First-run instant-rating backfill (once, sentinel-guarded, background).
+        _maybe_backfill(load_config())
     elif hook == "UserPromptSubmit":
         prompt = payload.get("prompt", "")
         emit(sid, "prompt", {
