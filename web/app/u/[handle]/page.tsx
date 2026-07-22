@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Radar from "@/components/Radar";
 import ShareRow from "@/components/ShareRow";
 import { focusDim, retroTrend } from "@/lib/trainer";
-import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers } from "@/lib/db";
+import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers, getLeaderboard } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
 import {
   dayStreak,
@@ -16,6 +16,12 @@ import {
   strongestDims,
   totalXP,
 } from "@/lib/stats";
+import {
+  buildDiagnostic,
+  cohortStatsFromLeaderboard,
+  MIN_TURNS_FOR_DIAGNOSTIC,
+  type DiagnosticDim,
+} from "@/lib/diagnostic";
 
 /** Percentile of this established rating among other established peers.
  * Honest signal for a recruiter (Priya): where does this sit in the population,
@@ -92,6 +98,20 @@ export default async function SharePage({ params }: Params) {
   const isOwner = viewer?.id === user.id;
   // A near-empty profile: guide the light user in instead of showing a bare radar.
   const onboarding = scores.length < 6;
+
+  // Diagnostic: only meaningful once past the onboarding gate.
+  const hasDiagnostic = scores.length >= MIN_TURNS_FOR_DIAGNOSTIC && Object.keys(avgs).length > 0;
+  let diagnostic = null;
+  if (hasDiagnostic) {
+    // Reuse the already-materialized leaderboard (same guard as ratingPercentile: skip at scale).
+    const lbRows = await getLeaderboard({ established_only: false, limit: 250 });
+    const cohortStats = cohortStatsFromLeaderboard(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lbRows as unknown as Array<Record<string, unknown>>,
+      user.id
+    );
+    diagnostic = buildDiagnostic(avgs, Object.keys(cohortStats).length > 0 ? cohortStats : null, 3);
+  }
 
   return (
     <div className="wrap">
@@ -198,6 +218,31 @@ export default async function SharePage({ params }: Params) {
         </div>
       )}
 
+      {/* ── DIAGNOSTIC: strengths (owner + public) ── */}
+      {diagnostic && diagnostic.strengths.length > 0 && (
+        <div className="card" style={{ maxWidth: 560, margin: "0 auto 18px", borderLeft: "3px solid #34d399" }}>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#34d399", textTransform: "uppercase", marginBottom: 12 }}>
+            Your strengths
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {diagnostic.strengths.map((d: DiagnosticDim) => (
+              <div key={d.key}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 3 }}>
+                  <span style={{ fontWeight: 700, color: "#e6edf3", fontSize: 14 }}>{d.label}</span>
+                  <span style={{ fontSize: 13, color: "#34d399" }}>{d.avg}/100</span>
+                  {d.percentile !== null && (
+                    <span style={{ fontSize: 12, color: "#8b98a9" }}>· {d.percentile}th pct</span>
+                  )}
+                </div>
+                <p style={{ margin: 0, fontSize: 13.5, color: "#9fb0c3", lineHeight: 1.55 }}>
+                  {d.strengthFrame}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {onboarding && (
         <div
           className="card"
@@ -223,6 +268,44 @@ export default async function SharePage({ params }: Params) {
         <p className="sub">Average score per dimension across all scored sessions (0–100).</p>
         <Radar dims={avgs} size={420} />
       </div>
+
+      {/* ── DIAGNOSTIC: growth areas ── */}
+      {diagnostic && diagnostic.growthAreas.length > 0 && (
+        <div className="card" style={{ maxWidth: 560, margin: "18px auto 0", borderLeft: "3px solid #fbbf24" }}>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#fbbf24", textTransform: "uppercase", marginBottom: 12 }}>
+            {isOwner ? "Where to level up" : "Growth areas"}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {diagnostic.growthAreas.map((d: DiagnosticDim) => (
+              <div key={d.key}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, color: "#e6edf3", fontSize: 14 }}>{d.label}</span>
+                  <span style={{ fontSize: 13, color: "#fbbf24" }}>{d.avg}/100</span>
+                  {d.percentile !== null && (
+                    <span style={{ fontSize: 12, color: "#8b98a9" }}>· {d.percentile}th pct</span>
+                  )}
+                </div>
+                {isOwner ? (
+                  /* Owner: full actionable coaching copy */
+                  <p style={{ margin: 0, fontSize: 13.5, color: "#c9d3df", lineHeight: 1.6 }}>
+                    {d.coaching}
+                  </p>
+                ) : (
+                  /* Public: soft framing, no specific coaching text shown */
+                  <p style={{ margin: 0, fontSize: 13.5, color: "#8b98a9", lineHeight: 1.55 }}>
+                    Room to grow in this dimension — coaching details are shown to the profile owner.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          {!isOwner && (
+            <p style={{ margin: "14px 0 0", fontSize: 12.5, color: "#5b6878", borderTop: "1px solid #1d2735", paddingTop: 10 }}>
+              Sign up to see your own full diagnostic with specific coaching on each growth area.
+            </p>
+          )}
+        </div>
+      )}
 
       {coaching && (
         <div className="card" style={{ maxWidth: 560, margin: "18px auto 0", borderLeft: "3px solid #67e8f9" }}>

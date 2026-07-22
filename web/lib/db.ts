@@ -323,6 +323,10 @@ export async function ingestEvents(userId: number, events: IngestEvent[]): Promi
         .insert(okScores.map((sc) => ({ user_id: userId, ...sc })));
       throwOn(error, "ingestEvents.scores");
     }
+    // Keep the leaderboard cache current on every ingest — one user, cheap.
+    if (okScores.length > 0) {
+      await recomputeLeaderboardRow(userId).catch(() => { /* non-fatal */ });
+    }
     return okEvents.length;
   }
 
@@ -340,6 +344,10 @@ export async function ingestEvents(userId: number, events: IngestEvent[]): Promi
       insScore.run(userId, sc.sid, sc.ts, sc.turn, sc.xp, sc.dims_json, sc.tip, sc.highlight);
   });
   txn();
+  // Keep the leaderboard cache current on every ingest — one user, cheap.
+  if (okScores.length > 0) {
+    await recomputeLeaderboardRow(userId).catch(() => { /* non-fatal */ });
+  }
   return okEvents.length;
 }
 
@@ -604,4 +612,221 @@ export async function setUserCreatedAt(userId: number, iso: string): Promise<voi
     return;
   }
   getSqlite().prepare("UPDATE users SET created_at = ? WHERE id = ?").run(iso, userId);
+}
+
+/* ------------------------------------------------------------------ */
+/* Leaderboard (aif_leaderboard / leaderboard SQLite mirror)           */
+/* ------------------------------------------------------------------ */
+
+export interface LeaderboardRow {
+  user_id: number;
+  handle: string;
+  rating: number;
+  band: string;
+  established: boolean;
+  turns: number;
+  dim_context_setting: number | null;
+  dim_plan_first: number | null;
+  dim_verification: number | null;
+  dim_diagnose: number | null;
+  dim_understanding: number | null;
+  dim_scope: number | null;
+  dim_iteration: number | null;
+  harness_score: number | null;
+  context_eng_score: number | null;
+  gh_commits: number | null;
+  gh_repos: number | null;
+  gh_loc: number | null;
+  tokens: number | null;
+  total_xp: number;
+  updated_at: string;
+}
+
+// Columns that are safe to ORDER BY (whitelist prevents injection).
+const SORT_WHITELIST = new Set([
+  "rating",
+  "harness_score",
+  "context_eng_score",
+  "gh_commits",
+  "gh_repos",
+  "gh_loc",
+  "tokens",
+  "total_xp",
+  "turns",
+]);
+
+export interface LeaderboardFilters {
+  sortBy?: string;
+  order?: "asc" | "desc";
+  min_rating?: number;
+  band?: string;
+  min_turns?: number;
+  has_github?: boolean;
+  established_only?: boolean;
+  limit?: number;
+}
+
+/**
+ * Recompute ONE user's leaderboard row from aif_turn_scores + aif_users
+ * and upsert into aif_leaderboard. Called at the tail of ingestEvents so
+ * the materialized row stays current without a separate cron.
+ */
+export async function recomputeLeaderboardRow(userId: number): Promise<void> {
+  // Import here (not top-level) to avoid circular-import issues at module init.
+  const { fluencyRating, dimAverages, totalXP: calcXP } = await import("./stats.ts");
+
+  const user = await getUserById(userId);
+  if (!user) return;
+  const scores = await turnScoresFor(userId);
+  const r = fluencyRating(scores);
+  const avgs = dimAverages(scores);
+  const xp = calcXP(scores);
+
+  const row = {
+    user_id: userId,
+    handle: user.handle,
+    rating: r.score,
+    band: r.band,
+    established: r.established,
+    turns: scores.length,
+    dim_context_setting: avgs["context_setting"] ?? null,
+    dim_plan_first: avgs["plan_first"] ?? null,
+    dim_verification: avgs["verification"] ?? null,
+    dim_diagnose: avgs["diagnose_vs_retry"] ?? null,
+    dim_understanding: avgs["understanding_seeking"] ?? null,
+    dim_scope: avgs["scope_discipline"] ?? null,
+    dim_iteration: avgs["iteration_discipline"] ?? null,
+    // Future phases populate harness/context_eng/gh/tokens — left null until then.
+    harness_score: null,
+    context_eng_score: null,
+    gh_commits: null,
+    gh_repos: null,
+    gh_loc: null,
+    tokens: null,
+    total_xp: xp,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (useSupabase()) {
+    const { error } = await getSb().from("aif_leaderboard").upsert(row, { onConflict: "user_id" });
+    throwOn(error, "recomputeLeaderboardRow");
+    return;
+  }
+
+  // SQLite mirror: ensure table exists then upsert.
+  const d = getSqlite();
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS leaderboard (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      handle TEXT NOT NULL,
+      rating REAL NOT NULL DEFAULT 0,
+      band TEXT NOT NULL DEFAULT 'Emerging',
+      established INTEGER NOT NULL DEFAULT 0,
+      turns INTEGER NOT NULL DEFAULT 0,
+      dim_context_setting REAL,
+      dim_plan_first REAL,
+      dim_verification REAL,
+      dim_diagnose REAL,
+      dim_understanding REAL,
+      dim_scope REAL,
+      dim_iteration REAL,
+      harness_score REAL,
+      context_eng_score REAL,
+      gh_commits INTEGER,
+      gh_repos INTEGER,
+      gh_loc INTEGER,
+      tokens INTEGER,
+      total_xp REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  d.prepare(`
+    INSERT INTO leaderboard
+      (user_id, handle, rating, band, established, turns,
+       dim_context_setting, dim_plan_first, dim_verification, dim_diagnose,
+       dim_understanding, dim_scope, dim_iteration,
+       harness_score, context_eng_score, gh_commits, gh_repos, gh_loc, tokens,
+       total_xp, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      handle=excluded.handle, rating=excluded.rating, band=excluded.band,
+      established=excluded.established, turns=excluded.turns,
+      dim_context_setting=excluded.dim_context_setting,
+      dim_plan_first=excluded.dim_plan_first,
+      dim_verification=excluded.dim_verification,
+      dim_diagnose=excluded.dim_diagnose,
+      dim_understanding=excluded.dim_understanding,
+      dim_scope=excluded.dim_scope,
+      dim_iteration=excluded.dim_iteration,
+      harness_score=excluded.harness_score,
+      context_eng_score=excluded.context_eng_score,
+      gh_commits=excluded.gh_commits, gh_repos=excluded.gh_repos,
+      gh_loc=excluded.gh_loc, tokens=excluded.tokens,
+      total_xp=excluded.total_xp, updated_at=excluded.updated_at
+  `).run(
+    row.user_id, row.handle, row.rating, row.band, row.established ? 1 : 0, row.turns,
+    row.dim_context_setting, row.dim_plan_first, row.dim_verification, row.dim_diagnose,
+    row.dim_understanding, row.dim_scope, row.dim_iteration,
+    row.harness_score, row.context_eng_score, row.gh_commits, row.gh_repos,
+    row.gh_loc, row.tokens, row.total_xp, row.updated_at
+  );
+}
+
+/**
+ * Read the precomputed leaderboard with a whitelisted sort + optional filters.
+ * Returns up to `limit` rows (default 100). All filters degrade gracefully:
+ * null stat columns are never filtered on unless the caller explicitly asks.
+ */
+export async function getLeaderboard(opts: LeaderboardFilters = {}): Promise<LeaderboardRow[]> {
+  const {
+    sortBy = "rating",
+    order = "desc",
+    min_rating,
+    band,
+    min_turns,
+    has_github,
+    established_only,
+    limit = 100,
+  } = opts;
+
+  const col = SORT_WHITELIST.has(sortBy) ? sortBy : "rating";
+  const dir = order === "asc" ? "asc" : "desc";
+
+  if (useSupabase()) {
+    let q = getSb()
+      .from("aif_leaderboard")
+      .select("*")
+      .order(col, { ascending: dir === "asc", nullsFirst: false })
+      .limit(Math.min(limit, 500));
+
+    if (min_rating !== undefined) q = q.gte("rating", min_rating);
+    if (band) q = q.eq("band", band);
+    if (min_turns !== undefined) q = q.gte("turns", min_turns);
+    if (has_github) q = q.not("gh_commits", "is", null);
+    if (established_only) q = q.eq("established", true);
+
+    const { data, error } = await q;
+    throwOn(error, "getLeaderboard");
+    return (data ?? []) as LeaderboardRow[];
+  }
+
+  // SQLite path: simple query (dev only, no complex filter needed for local).
+  const d = getSqlite();
+  try {
+    let sql = `SELECT * FROM leaderboard`;
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+    if (min_rating !== undefined) { conditions.push("rating >= ?"); params.push(min_rating); }
+    if (band) { conditions.push("band = ?"); params.push(band); }
+    if (min_turns !== undefined) { conditions.push("turns >= ?"); params.push(min_turns); }
+    if (has_github) conditions.push("gh_commits IS NOT NULL");
+    if (established_only) conditions.push("established = 1");
+    if (conditions.length) sql += " WHERE " + conditions.join(" AND ");
+    // SQLite doesn't support NULLS LAST in older versions; coalesce to sort nulls last.
+    sql += ` ORDER BY COALESCE(${col}, -1) ${dir.toUpperCase()} LIMIT ?`;
+    params.push(Math.min(limit, 500));
+    return d.prepare(sql).all(...params) as LeaderboardRow[];
+  } catch {
+    return [];
+  }
 }
