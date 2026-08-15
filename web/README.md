@@ -33,7 +33,7 @@ Requires Node >= 23.6 (the seed script runs TypeScript via Node's native type st
 
 ```bash
 curl -s -X POST http://localhost:4173/api/ingest \
-  -H "Authorization: Bearer dev-token-jd" \
+  -H "Authorization: Bearer $CLAWDACADEMY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"events":[{"v":1,"ts":"2026-07-03T12:00:00Z","sid":"s-live","event":"turn_score",
        "data":{"turn":1,"dims":{"verification":80,"context_setting":65},"xp":30,
