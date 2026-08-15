@@ -830,3 +830,70 @@ export async function getLeaderboard(opts: LeaderboardFilters = {}): Promise<Lea
     return [];
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Rating snapshots (reassessment history — PRD-04)                    */
+/* A snapshot is a point-in-time record of a user's Fluency Rating,    */
+/* written on an explicit, cooldown-gated "Reassess" so we can show    */
+/* progress over time and gate re-firing.                              */
+/* ------------------------------------------------------------------ */
+
+export interface RatingSnapshot {
+  id: number;
+  user_id: number;
+  score: number;
+  band: string;
+  turns: number;
+  dims: Record<string, number> | null;
+  created_at: string;
+}
+
+/** Most recent snapshot for a user, or null if they've never reassessed. */
+export async function latestSnapshot(userId: number): Promise<RatingSnapshot | null> {
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_rating_snapshots")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    throwOn(error, "latestSnapshot");
+    return (data && data[0]) ? (data[0] as RatingSnapshot) : null;
+  }
+  return null; // SQLite dev path: reassessment history is prod-only.
+}
+
+/** Insert a new snapshot; returns the stored row. */
+export async function insertSnapshot(params: {
+  userId: number;
+  score: number;
+  band: string;
+  turns: number;
+  dims: Record<string, number> | null;
+}): Promise<RatingSnapshot> {
+  if (useSupabase()) {
+    const { data, error } = await getSb()
+      .from("aif_rating_snapshots")
+      .insert({
+        user_id: params.userId,
+        score: params.score,
+        band: params.band,
+        turns: params.turns,
+        dims: params.dims,
+      })
+      .select("*")
+      .single();
+    throwOn(error, "insertSnapshot");
+    return data as RatingSnapshot;
+  }
+  // SQLite dev path: return an ephemeral row so callers don't crash locally.
+  return {
+    id: 0,
+    user_id: params.userId,
+    score: params.score,
+    band: params.band,
+    turns: params.turns,
+    dims: params.dims,
+    created_at: new Date().toISOString(),
+  };
+}

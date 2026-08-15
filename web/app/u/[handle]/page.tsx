@@ -4,8 +4,11 @@ import { notFound } from "next/navigation";
 import Radar from "@/components/Radar";
 import ShareRow from "@/components/ShareRow";
 import { focusDim, retroTrend } from "@/lib/trainer";
-import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers, getLeaderboard } from "@/lib/db";
+import { getUserByHandle, turnScoresFor, sessionCountFor, listUsers, getLeaderboard, latestSnapshot } from "@/lib/db";
 import { getCurrentUser } from "@/lib/session";
+import { buildTeachingPrompt } from "@/lib/teach";
+import CopyPrompt from "@/components/CopyPrompt";
+import ReassessButton from "@/components/ReassessButton";
 import {
   dayStreak,
   dimAverages,
@@ -111,6 +114,27 @@ export default async function SharePage({ params }: Params) {
       user.id
     );
     diagnostic = buildDiagnostic(avgs, Object.keys(cohortStats).length > 0 ? cohortStats : null, 3);
+  }
+
+  // Top strength label anchors the coaching prompts ("meet me at that level").
+  const topStrengthLabel = diagnostic?.strengths[0]?.label ?? null;
+
+  // Reassessment: owner-only, cooldown-gated (mirrors /api/reassess: 20h).
+  const REASSESS_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+  let reassess: { lastAt: string | null; eligible: boolean; retryInMs: number } | null = null;
+  if (isOwner && rating.established) {
+    const snap = await latestSnapshot(user.id);
+    if (!snap) {
+      reassess = { lastAt: null, eligible: true, retryInMs: 0 };
+    } else {
+      const age = Date.now() - new Date(snap.created_at).getTime();
+      const eligible = age >= REASSESS_COOLDOWN_MS;
+      reassess = {
+        lastAt: snap.created_at,
+        eligible,
+        retryInMs: eligible ? 0 : REASSESS_COOLDOWN_MS - age,
+      };
+    }
   }
 
   return (
@@ -286,10 +310,21 @@ export default async function SharePage({ params }: Params) {
                   )}
                 </div>
                 {isOwner ? (
-                  /* Owner: full actionable coaching copy */
-                  <p style={{ margin: 0, fontSize: 13.5, color: "#c9d3df", lineHeight: 1.6 }}>
-                    {d.coaching}
-                  </p>
+                  /* Owner: full actionable coaching copy + a paste-in prompt that
+                     makes Claude Code actively teach this exact gap. */
+                  <>
+                    <p style={{ margin: 0, fontSize: 13.5, color: "#c9d3df", lineHeight: 1.6 }}>
+                      {d.coaching}
+                    </p>
+                    <CopyPrompt
+                      label={d.label}
+                      prompt={buildTeachingPrompt(d.key, {
+                        label: d.label,
+                        avg: d.avg,
+                        topStrengthLabel,
+                      })}
+                    />
+                  </>
                 ) : (
                   /* Public: soft framing, no specific coaching text shown */
                   <p style={{ margin: 0, fontSize: 13.5, color: "#8b98a9", lineHeight: 1.55 }}>
@@ -304,6 +339,24 @@ export default async function SharePage({ params }: Params) {
               Sign up to see your own full diagnostic with specific coaching on each growth area.
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── REASSESS: re-fire the assessment after doing the coached work ── */}
+      {reassess && (
+        <div className="card" style={{ maxWidth: 560, margin: "18px auto 0", borderLeft: "3px solid #67e8f9" }}>
+          <div style={{ fontSize: 12, letterSpacing: 2, color: "#67e8f9", textTransform: "uppercase", marginBottom: 8 }}>
+            Reassess
+          </div>
+          <p style={{ margin: "0 0 12px", fontSize: 13.5, color: "#c9d3df", lineHeight: 1.6 }}>
+            Grab a coaching prompt above, run it on real work in Claude Code, then reassess to
+            see the dimension move. Snapshots are spaced out so the history reflects real progress.
+          </p>
+          <ReassessButton
+            lastAt={reassess.lastAt}
+            eligible={reassess.eligible}
+            retryInMs={reassess.retryInMs}
+          />
         </div>
       )}
 
