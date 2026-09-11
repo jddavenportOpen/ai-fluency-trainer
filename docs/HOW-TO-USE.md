@@ -9,10 +9,14 @@ is how to get it running and read your results.
 Prerequisites: `python3` (3.8+) and `node`. The installer checks for both and
 tells you clearly if either is missing, it will not silently do nothing.
 
-In Claude Code:
+In Claude Code, run these one at a time. Paste both lines together and the first
+command reads the second line as part of the repo name, then fails:
 
 ```
 /plugin marketplace add jddavenportOpen/ai-fluency-trainer
+```
+
+```
 /plugin install ai-fluency@ai-fluency
 ```
 

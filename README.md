@@ -89,7 +89,7 @@ Claude Code — your Fluency Rating shows in the statusline and at **clawdacadem
 
 - **Prefer to claim a handle first?** Go to **[clawdacademy.app/start](https://clawdacademy.app/start)**
   (no email, no password) and it hands you the same one-liner with your token baked in.
-- **Already inside Claude Code?** `/clawdacademy setup`
+- **Already inside Claude Code?** `/ai-fluency:clawdacademy setup` (plugin commands need the `ai-fluency:` prefix)
 - **Uninstall:** `./install.sh --uninstall` (your local data stays in `~/.ai-fluency`).
 
 ## What it measures

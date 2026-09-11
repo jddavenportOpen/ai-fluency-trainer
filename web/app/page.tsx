@@ -51,9 +51,10 @@ export default async function Home() {
             <b>Install in Claude Code</b>
           </div>
           <p style={{ margin: "0 0 6px", color: "#9fb0c3", fontSize: 13 }}>
-            Run these two commands inside any Claude Code session:
+            Run these two commands inside any Claude Code session, one at a time:
           </p>
-          <pre style={codeBlockStyle}>{`/plugin marketplace add jddavenportOpen/ai-fluency-trainer\n/plugin install ai-fluency@ai-fluency`}</pre>
+          <pre style={codeBlockStyle}>{`/plugin marketplace add jddavenportOpen/ai-fluency-trainer`}</pre>
+          <pre style={codeBlockStyle}>{`/plugin install ai-fluency@ai-fluency`}</pre>
           <p style={{ margin: "10px 0 4px", color: "#9fb0c3", fontSize: 13 }}>
             Or paste one line into your terminal:
           </p>

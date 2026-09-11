@@ -9,14 +9,19 @@ shows a Fluency Rating in the statusline.
 
 Do this, reporting each step plainly:
 
-1. **Check current state** (read-only):
-   `node "$CLAUDE_PLUGIN_ROOT/../../harness/setup.js" status`
-   The `harness/` dir lives at the repo root next to `plugin/`, `coach/`, and
-   `coach-core/`. If that relative path does not resolve, locate `harness/setup.js`
-   under the ai-fluency-trainer checkout and use its absolute path.
+1. **Find the harness, then check current state** (read-only). `harness/setup.js`
+   lives at the repo root, next to `plugin/`. `$CLAUDE_PLUGIN_ROOT` is a cached copy of
+   `plugin/` alone, so no path relative to it reaches the harness. Use the first of
+   these that exists:
+   - `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/marketplaces/ai-fluency/harness/setup.js`
+     (installed with `/plugin marketplace add jddavenportOpen/ai-fluency-trainer`)
+   - `$HOME/.clawdacademy/src/harness/setup.js` (installed with the clawdacademy.app one-liner)
+
+   Then run `node "<that path>" status`. If neither exists, tell the user to run
+   `bash -c "$(curl -fsSL https://clawdacademy.app/install.sh)"` and stop.
 
 2. **Run setup**:
-   `node <path>/harness/setup.js setup --auto`
+   `node "<that path>" setup --auto`
    This ensures Claude Code is installed, installs the capture plugin, wires the
    cross-platform statusline, and writes config. **Before any install command runs,
    SHOW the exact command** (the script prints it) and let the user say "I'll do it

@@ -109,9 +109,15 @@ Nothing leaves the machine unless the user sets a `"token"` field in
 
 ---
 
-## Install command (for users, after marketplace is live)
+## Install commands (for users, after marketplace is live)
+
+Two commands, run one at a time. Pasted as one block, `/plugin marketplace add` reads the
+second line as part of its argument and fails.
 
 ```
 /plugin marketplace add jddavenportOpen/ai-fluency-trainer
+```
+
+```
 /plugin install ai-fluency@ai-fluency
 ```

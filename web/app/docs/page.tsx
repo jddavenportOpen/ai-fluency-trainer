@@ -71,7 +71,7 @@ export default function Docs() {
           Prerequisites: <code>python3</code> (3.8+) and <code>node</code>. The installer checks
           for both and tells you clearly if either is missing, it will not silently do nothing.
         </p>
-        <p>In Claude Code:</p>
+        <p>In Claude Code, run these one at a time:</p>
         <pre style={{
           background: "var(--bg-inset)",
           border: "1px solid var(--border)",
@@ -83,7 +83,20 @@ export default function Docs() {
           overflowX: "auto",
           margin: "10px 0",
         }}>
-          {`/plugin marketplace add jddavenportOpen/ai-fluency-trainer\n/plugin install ai-fluency@ai-fluency`}
+          {`/plugin marketplace add jddavenportOpen/ai-fluency-trainer`}
+        </pre>
+        <pre style={{
+          background: "var(--bg-inset)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: "14px 18px",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 13,
+          color: "#c9d3df",
+          overflowX: "auto",
+          margin: "10px 0",
+        }}>
+          {`/plugin install ai-fluency@ai-fluency`}
         </pre>
         <p>Or one line in your terminal:</p>
         <pre style={{

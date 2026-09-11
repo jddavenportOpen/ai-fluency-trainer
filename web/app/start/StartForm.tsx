@@ -97,7 +97,7 @@ export default function StartForm() {
           <p className="sub" style={{ marginTop: 8, fontSize: 12.5 }}>
             Your token is baked into the command above (save it if you want it separately:{" "}
             <code>{done.device_token}</code>). Already have the Clawdacademy plugin? Just run{" "}
-            <code>/clawdacademy setup --handle {done.handle}</code> inside Claude Code.
+            <code>/ai-fluency:clawdacademy setup --handle {done.handle}</code> inside Claude Code.
           </p>
 
           <div className="links" style={{ marginTop: 24 }}>
