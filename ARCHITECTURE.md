@@ -75,8 +75,8 @@ until the next). It skips: `isMeta`/sidechain records; interrupted/incomplete tu
 never stalls later scoring); and **agent bootstrap first-turns** (a machine-injected
 "You are the X agent…" prompt is not human input and would otherwise inflate the profile).
 
-**The 7 dimensions** (weights reflect the research showing that
-verification and diagnosis matter most):
+**The 7 dimensions** (the weights are my judgment: verification and diagnosis
+count most):
 
 | dim key | measures | weight |
 |---|---|---|

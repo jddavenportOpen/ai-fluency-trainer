@@ -1,6 +1,6 @@
 # Clawdacademy
 
-I wanted to know if I was getting better at working with Claude or just faster. So I built this. It's a Claude Code plugin that scores 7 habits from your own sessions, names your weakest one, and coaches you on it while you work. It runs locally, and sync is opt-in.
+I wanted to know if I was getting better at working with Claude or just faster. So I built this. It's a Claude Code plugin that scores 7 habits from your own sessions, names your weakest one, and can coach you on it while you work (off until you turn it on). It runs locally, and sync is opt-in.
 
 Install it with one line (details below), do one real task in Claude Code, and your rating shows in the statusline. The hosted dashboard is at [clawdacademy.app](https://clawdacademy.app).
 
@@ -80,7 +80,7 @@ Seven behaviors, scored from your real sessions:
 A habit that doesn't apply to a turn is marked not applicable and never counts against you. A short,
 well-aimed one-line prompt isn't scored as weak. Nothing scores speed, volume or acceptance rate, and
 all scoring is local. The headline **Fluency Rating** is the weighted average quality of your recent
-turns, so doing more turns can't raise it. Only working better can. It's a profile of your own
+turns, so more turns don't move it. It's a profile of your own
 behavior. Nobody has audited it, and I haven't validated it against outside outcomes yet.
 
 ## Layout

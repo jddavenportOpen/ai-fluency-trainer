@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "ai-fluency",
-      "displayName": "AI Fluency Trainer",
+      "displayName": "Clawdacademy",
       "source": "./plugin",
       "description": "Scores 7 AI-fluency habits from your real Claude Code sessions: context-setting, plan-first, verification, diagnose-vs-retry, understanding-seeking, scope discipline and iteration discipline. Scoring runs on your machine. Only aggregate turn scores sync to your dashboard, and only if you opt in. Raw prompts never leave your machine.",
       "version": "0.1.0",
