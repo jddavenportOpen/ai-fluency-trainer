@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Behavior rubric for the AI Fluency scorer — dimensions as data.
 
-Each dimension maps to a numbered row of the evidence-backed rubric in
-RESEARCH.md §4 ("research_id"). Design rules honored (§4/§7):
+Each dimension maps to a numbered row of the evidence-backed rubric in my
+research notes ("research_id"). Design rules:
   * NEVER score raw speed or acceptance rate as skill.
   * Composite scoring; verification/diagnosis weighted over throughput.
   * Fit-to-task, not elevation: dims that don't apply to a turn score a

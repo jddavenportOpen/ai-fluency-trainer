@@ -1,9 +1,8 @@
-# AI Fluency Trainer — How It Works
+# Clawdacademy: how it works
 
-*Accurate as of 2026-07-04 (post-launch, post-Fable-review). Working name; naming/GTM deferred.*
+*Accurate as of 2026-07-04.*
 
-Measures — and trains — how well you actually use AI, from your real Claude Code usage. The
-thesis and evidence live in `docs/RESEARCH.md`; the business model in `docs/PRODUCTIZATION.md`.
+Measures and trains how well you use AI, from your real Claude Code sessions.
 
 ## The whole system in one picture
 
@@ -35,7 +34,7 @@ plugin/hooks/capture.py  ──►  ~/.ai-fluency/events.jsonl   (append-only lo
                                      session-auth gated)                recruiter profile)
 ```
 
-Two products, one spine (capture → score → surface):
+Two products, one pipeline (capture → score → surface):
 - **Free plugin** (`plugin/` + `scorer/`) — captures usage, scores it **on-device**, syncs only
   aggregate scores. This is what would be open-sourced.
 - **Paid "Learn Claude Code" wrapper** (`coach/` + `desktop/`) — real-time coaching, XP/levels,
@@ -76,8 +75,8 @@ until the next). It skips: `isMeta`/sidechain records; interrupted/incomplete tu
 never stalls later scoring); and **agent bootstrap first-turns** (a machine-injected
 "You are the X agent…" prompt is not human input and would otherwise inflate the profile).
 
-**The 7 dimensions** (grounded in `docs/RESEARCH.md §4`; weights reflect the evidence that
-verification/diagnosis matter most):
+**The 7 dimensions** (weights reflect the research showing that
+verification and diagnosis matter most):
 
 | dim key | measures | weight |
 |---|---|---|
@@ -181,6 +180,4 @@ Dimension keys are **data-driven** end-to-end — every consumer renders whateve
 
 ## Where the docs live
 
-`docs/` in this repo mirrors the design docs (also kept in `~/clawd/projects/ai-fluency-trainer/`
-as the working copies): `RESEARCH.md` (the evidence), `PRD.md`, `PRODUCTIZATION.md` (business
-model), `WORKPLAN.md` (status + backlog), `KEITH_PILOT_PROPOSAL.md`.
+`docs/HOW-TO-USE.md` covers install and reading your results.

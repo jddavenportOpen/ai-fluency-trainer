@@ -1,17 +1,16 @@
 # Clawdacademy
 
-**Measure — and train — how well you actually work with AI, from your real Claude Code sessions.**
+I wanted to know if I was getting better at working with Claude or just faster. So I built this. It's a Claude Code plugin that scores 7 habits from your own sessions, names your weakest one, and coaches you on it while you work. It runs locally, and sync is opt-in.
 
-Most people are getting passively worse with AI and can't feel it. In a controlled study (METR),
-developers believed AI made them ~20% faster; measured, they were **19% slower** — and couldn't tell.
-Clawdacademy scores 7 judgment behaviors from your real sessions, names your single weakest habit,
-and coaches you in-flow to fix it. Free, local-first, open source (MIT).
+Install it with one line (details below), do one real task in Claude Code, and your rating shows in the statusline. The hosted dashboard is at [clawdacademy.app](https://clawdacademy.app).
 
-Live at **[clawdacademy.app](https://clawdacademy.app)**.
+One product, three names you'll see: Clawdacademy is the product, this repo is `ai-fluency-trainer`, and the Claude Code plugin is called `ai-fluency`.
 
-## Data disclosure — what the plugin captures and what leaves your machine
+Moved here from my private working repo in July 2026. Most of this code was written by Claude Code agents I run. I pick what gets built, set the tests it has to pass, and check it by using it.
 
-This plugin fires Claude Code hooks to observe your sessions. Here is the complete, accurate picture.
+## What the plugin captures, and what leaves your machine
+
+The plugin uses Claude Code hooks to watch your sessions. Here is everything it records and everything it sends.
 
 ### What the plugin captures (stays local by default)
 
@@ -20,7 +19,7 @@ The capture hook (`plugin/hooks/capture.py`) appends structured events to `~/.ai
 | Event | What is recorded locally |
 |---|---|
 | `session_start` | Session ID, SHA-256 of the working directory path (10 hex chars, not the path itself), session kind |
-| `prompt` | Raw prompt text (word/char count + full text — **local only, never synced**) |
+| `prompt` | Raw prompt text (word and character count plus full text, **local only, never synced**) |
 | `tool_use` | Tool name, success/failure, list of input key names (not values) |
 | `tool_failure` | Tool name, error type (first 80 chars) |
 | `turn_end` | Session ID, transcript path (local path, never synced) |
@@ -42,10 +41,10 @@ Sync (`plugin/scripts/sync.py`) is **opt-in and requires a token** in `~/.ai-flu
 | `session_end` events | Session ID, timestamp, reason |
 
 **What is NEVER synced, under any config:**
-- Raw prompt text (`text` field) — stripped by `STRIP_KEYS` in `sync.py` before the payload is built
-- Transcript paths — also in `STRIP_KEYS`
-- Headless / non-interactive sessions (fleet agents, `claude -p` runs) — excluded by default
-- In-flow coaching tips (these can interpolate prompt fragments) — local-only unless you set `"sync_tips": true`
+- Raw prompt text (`text` field), stripped by `STRIP_KEYS` in `sync.py` before the payload is built
+- Transcript paths, also in `STRIP_KEYS`
+- Headless sessions (`claude -p` runs and other non-interactive agents), excluded by default
+- In-flow coaching tips (these can quote bits of your prompt), local-only unless you set `"sync_tips": true`
 
 The strip is enforced client-side in `plugin/scripts/sync.py` (`STRIP_KEYS = {"transcript_path", "text"}`) and server-side on receipt.
 
@@ -55,28 +54,7 @@ The strip is enforced client-side in `plugin/scripts/sync.py` (`STRIP_KEYS = {"t
 - **Disable upload entirely:** add `"no_upload": true` to `~/.ai-fluency/config.json`, or just omit the `"token"` field
 - **Read the full path in code:** `plugin/hooks/capture.py` (what is captured locally), `plugin/scripts/sync.py` (what is sent)
 
-The whole pipeline is MIT-licensed and open. Nothing about what leaves your machine is hidden.
-
-### Legacy section (kept for reference)
-
-Your raw prompts and code **never leave your machine**. This is a telemetry plugin from a solo
-publisher, so don't take that on faith — **audit it**, the whole path is open (MIT):
-
-- **See exactly what would sync, before anything leaves:** `python3 plugin/scripts/sync.py --dry-run`
-  prints the precise payload.
-- **Only derived/aggregate events sync** (`turn_score`, `session_start`/`session_end`) — **never raw
-  `prompt` text.** Your prompt text stays local by design (`plugin/scripts/sync.py`, `STRIP_KEYS`).
-- **`text` and `transcript_path` are stripped twice** — client-side before sending
-  (`plugin/scripts/sync.py`) *and* server-side on receipt (`web/lib/db.ts`, `SERVER_STRIP_KEYS`).
-- **Everything is scored on-device** and written in plain JSONL you can read:
-  `~/.ai-fluency/events.jsonl`.
-- **Tips can quote your prompt, so they're local-only** unless you explicitly opt in
-  (`sync_tips: true` in `~/.ai-fluency/config.json`).
-- **In-flow interventions are OBSERVE-ONLY by default** — they log and inject nothing unless you opt
-  into live coaching; even then they're rate-limited, dismissible, and fail-open.
-
-Read the capture hooks (`plugin/hooks/`), the sync (`plugin/scripts/sync.py`), and the server ingest
-(`web/lib/db.ts`) — nothing about what leaves your machine is hidden.
+The whole pipeline is MIT-licensed, so you can read every line that touches your data. Live coaching is off by default. Until you turn it on, the coaching hook only records what it would have said.
 
 ## Install (one line)
 
@@ -84,8 +62,8 @@ Read the capture hooks (`plugin/hooks/`), the sync (`plugin/scripts/sync.py`), a
 bash -c "$(curl -fsSL https://clawdacademy.app/install.sh)"
 ```
 
-Installs Claude Code (if missing) + the plugin and wires your profile. Then do one real task in
-Claude Code — your Fluency Rating shows in the statusline and at **clawdacademy.app/u/&lt;you&gt;**.
+Installs Claude Code (if missing) and the plugin, and sets up your profile. Then do one real task in
+Claude Code. Your Fluency Rating shows in the statusline and at **clawdacademy.app/u/&lt;you&gt;**.
 
 - **Prefer to claim a handle first?** Go to **[clawdacademy.app/start](https://clawdacademy.app/start)**
   (no email, no password) and it hands you the same one-liner with your token baked in.
@@ -94,22 +72,22 @@ Claude Code — your Fluency Rating shows in the statusline and at **clawdacadem
 
 ## What it measures
 
-Seven behaviors, scored from your real sessions (research-grounded; keys are data-driven end-to-end):
+Seven behaviors, scored from your real sessions:
 
 `context_setting` · `plan_first` · `verification` (weight 1.6) · `diagnose_vs_retry` (1.4) ·
 `understanding_seeking` · `scope_discipline` · `iteration_discipline`
 
-Design rules: **fit-to-task** (a dimension that doesn't apply to a turn is marked not-applicable, never
-penalized — a calibrated one-liner is not "weak"); **nothing scores speed, volume, or acceptance rate**;
-all scoring is local. The headline **Fluency Rating** is the mean weighted *quality* of your recent
-turns — volume-independent, so grinding more turns can't inflate it, only working better can. It is a
-**self-instrumented behavior profile, not an audited credential** (a validation study is in progress).
+A habit that doesn't apply to a turn is marked not applicable and never counts against you. A short,
+well-aimed one-line prompt isn't scored as weak. Nothing scores speed, volume or acceptance rate, and
+all scoring is local. The headline **Fluency Rating** is the weighted average quality of your recent
+turns, so doing more turns can't raise it. Only working better can. It's a profile of your own
+behavior. Nobody has audited it, and I haven't validated it against outside outcomes yet.
 
 ## Layout
 
 | Dir | What |
 |---|---|
-| `plugin/` | Claude Code plugin: capture hooks (fail-open) + the in-flow intervention hook + aggregate-only sync |
+| `plugin/` | Claude Code plugin: capture hooks (they fail open, so a crash never blocks your session), the in-flow coaching hook, and aggregate-only sync |
 | `scorer/` | 7-dimension heuristic engine (stdlib-only, idempotent, fail-open) + tests |
 | `coach-core/` | shared measurement engine (level/XP + Fluency Rating), UI-free, zero-dep |
 | `trainer-core/` | shared teaching engine: 9-lesson curriculum + daily focus-dim + the 3 forcing-function rules |
@@ -121,9 +99,9 @@ turns — volume-independent, so grinding more turns can't inflate it, only work
 ## Tests
 
 ```bash
-python3 scorer/test_discrimination.py        # good-user must beat bad-user by a wide margin
+python3 scorer/test_discrimination.py        # a good user must beat a bad user by a wide margin
 python3 scorer/test_calibrated_oracle.py     # fit-to-task: calibrated one-liners aren't scored "weak"
 node    trainer-core/test.js                 # curriculum + focus-dim + intervention rules
 ```
 
-MIT licensed. Docs: `ARCHITECTURE.md` (contracts).
+MIT licensed. How it works: `ARCHITECTURE.md`. Getting started: `docs/HOW-TO-USE.md`.
